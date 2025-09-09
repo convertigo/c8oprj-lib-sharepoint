@@ -69,6 +69,39 @@ comment: List Items from a Sharepoint list. Will automatically paginate handling
       - SmartType: 
         - ↑mode: JS
         - →→: data
+  jsonSample: |
+    '{
+      "SharePointList": [
+        {
+          "FileSystemObjectType": 0,
+          "Id": 1,
+          "ID": 1,
+          "ContentTypeId": "0x010069B8FE8854137F418ED98D146C65387F",
+          "Title": "TEST",
+          "Modified": "2025-09-07T08:06:01Z",
+          "Created": "2025-09-07T08:06:01Z",
+          "AuthorId": 1073741823,
+          "EditorId": 1073741823,
+          "OData__UIVersionString": "1.0",
+          "Attachments": false,
+          "GUID": "a5ac2d26-dda6-4798-9a31-f0c11c7730da"
+        },
+        {
+          "FileSystemObjectType": 0,
+          "Id": 2,
+          "ID": 2,
+          "ContentTypeId": "0x010069B8FE8854137F418ED98D146C65387F",
+          "Title": "TEST",
+          "Modified": "2025-09-08T10:59:30Z",
+          "Created": "2025-09-08T10:59:30Z",
+          "AuthorId": 1073741823,
+          "EditorId": 1073741823,
+          "OData__UIVersionString": "1.0",
+          "Attachments": false,
+          "GUID": "61443419-3cc9-42fa-a087-27021fb64098"
+        }
+      ]
+    }'
   key: 
     - xmlizable: 
       - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
