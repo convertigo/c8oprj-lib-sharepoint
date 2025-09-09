@@ -1,0 +1,98 @@
+accessibility: Hidden
+comment: List Items from a Sharepoint list
+↓ListGetItems [steps.SimpleStep-1757335816105]: 
+  expression: |
+    '// RhinoJS (e.g., in Convertigo / Rhino contexts)
+    include("js/common.js");
+    
+    // ---- Imports
+    var I = new JavaImporter(
+      Packages.org.apache.hc.client5.http.classic.methods,
+      Packages.org.apache.hc.client5.http.impl.classic,
+      Packages.org.apache.hc.client5.http.auth,
+      Packages.org.apache.hc.client5.http.config,
+      Packages.org.apache.hc.client5.http.impl.auth,
+      Packages.org.apache.hc.client5.http.protocol,
+      Packages.org.apache.hc.client5.http,
+      Packages.org.apache.hc.client5.http.cookie,
+      Packages.org.apache.hc.client5.http.cookie.BasicCookieStore,
+      Packages.org.apache.hc.client5.http.impl.cookie,
+      Packages.org.apache.hc.client5.http.impl.routing,
+      Packages.org.apache.hc.client5.http.impl.io,
+      Packages.org.apache.hc.core5.http,
+      Packages.org.apache.hc.core5.http.io.entity,
+      Packages.org.apache.hc.core5.http.message,
+      Packages.org.apache.hc.core5.util
+    );
+    
+    
+    
+    with (I) {
+      var client = Authenticate();
+      
+      // SharePoint REST endpoint for list items
+      // Docs: https://<server>/<sitecollection>/<site>/_api/web/lists/getbytitle(''MyList'')/items
+      
+      var url = sharepointBase + "/_api/web/lists/getbytitle(''" + list + "'')/items?$select=*";
+      var get = new HttpGet(url);
+      get.addHeader("Accept", "application/json;odata=nometadata"); // lean payload
+    
+      var res = client.execute(get);
+      var code = res.getCode();
+      var body = org.apache.hc.core5.http.io.entity.EntityUtils.toString(res.getEntity());
+    
+      if (code >= 200 && code < 300) {
+    	log.warn("Response: " + body);
+        var data = JSON.parse(body); // Rhino has JSON by default
+      } else {
+        throw "HTTP " + code + " from SharePoint: " + body;
+      }
+    }
+    '
+↓object [steps.JsonToXmlStep-1757407925802]: 
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: data
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: SharePointList
+↓domain [variables.RequestableVariable-1757336196039]: 
+↓username [variables.RequestableVariable-1757337058825]: 
+↓password [variables.RequestableVariable-1757337070503]: 
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: '-1'
+↓sharepointBase [variables.RequestableVariable-1757337093225]: 
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: '-1'
+↓TestOK [core.TestCase]: 
+  ↓domain [variables.TestCaseVariable-1757337121099]: 
+    comment: The NT Domain
+    value: SP2016
+  ↓username [variables.TestCaseVariable-1757337121101]: 
+    comment: User accessing the list
+    value: Administrator
+  ↓password [variables.TestCaseVariable-1757337121103]: 
+    comment: Users's password
+    value: 
+      - ↑ciphered: true
+      - ↑traceable: false
+      - →→: x182d23d7c4a25bf50dfbdb8d437e84d71bf623c6f0bb8c134e7073605afc17a211549ea67bae77571267e2e6c3830338
+    visibility: '-1'
+  ↓sharepointBase [variables.TestCaseVariable-1757337121105]: 
+    comment: SharePoint base URL as http(s)://server/sites/mysite
+    value: http://ec2amaz-5ju4nml/sites/convertigo
+  ↓list [variables.TestCaseVariable-1757338745373]: 
+    comment: list to read
+    value: c8olist

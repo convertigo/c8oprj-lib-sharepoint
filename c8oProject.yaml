@@ -1,8 +1,11 @@
 ↑convertigo: 8.0.0.m006
 ↓lib_Sharepoint [core.Project]: 
-  comment: Mashup Sequencer project
+  comment: |
+    This is is the Sharepoint Connector for Convertigo. Use this connector to access On premises versions of SharePoint server. This connector will not work to access Azure Cloud Sharepoint Services
+    
   contextTimeout: 59
   corsOrigin: =Origin
   httpSessionTimeout: 60
+  version: 0.0.1
   ↓void [connectors.SqlConnector]: 🗏 connectors/void.yaml
-  ↓NewSequence [sequences.GenericSequence]: 🗏 sequences/NewSequence.yaml
+  ↓ListGetItems [sequences.GenericSequence]: 🗏 sequences/ListGetItems.yaml
