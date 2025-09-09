@@ -44,7 +44,7 @@ For more technical informations : [documentation](./project.md)
 
 ### ListGetItems
 
-List Items from a Sharepoint list
+List Items from a Sharepoint list. Will automatically paginate handling page sizes
 
 **variables**
 
@@ -54,6 +54,9 @@ List Items from a Sharepoint list
 </tr>
 <tr>
 <td>domain</td><td>The NT Domain</td>
+</tr>
+<tr>
+<td>pageSize</td><td>The number of items in a page</td>
 </tr>
 <tr>
 <td>password</td><td>User's password</td>

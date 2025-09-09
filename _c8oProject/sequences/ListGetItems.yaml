@@ -1,5 +1,5 @@
 accessibility: Hidden
-comment: List Items from a Sharepoint list
+comment: List Items from a Sharepoint list. Will automatically paginate handling page sizes
 ↓ListGetItems [steps.SimpleStep-1757335816105]: 
   expression: |
     '// RhinoJS (e.g., in Convertigo / Rhino contexts)
@@ -33,20 +33,33 @@ comment: List Items from a Sharepoint list
       // SharePoint REST endpoint for list items
       // Docs: https://<server>/<sitecollection>/<site>/_api/web/lists/getbytitle(''MyList'')/items
       
-      var url = sharepointBase + "/_api/web/lists/getbytitle(''" + list + "'')/items?$select=*";
-      var get = new HttpGet(url);
-      get.addHeader("Accept", "application/json;odata=nometadata"); // lean payload
-    
-      var res = client.execute(get);
-      var code = res.getCode();
-      var body = org.apache.hc.core5.http.io.entity.EntityUtils.toString(res.getEntity());
-    
-      if (code >= 200 && code < 300) {
-    	log.warn("Response: " + body);
-        var data = JSON.parse(body); // Rhino has JSON by default
-      } else {
-        throw "HTTP " + code + " from SharePoint: " + body;
-      }
+      var url = sharepointBase + "/_api/web/lists/getbytitle(''" + list + "'')/items"
+      	+"?$select=*"
+    	+"&$orderby=Id"
+    	+"&$top=" + pageSize;
+    	
+    	data = [];
+    	while (url) {	
+    	  var get = new HttpGet(url);
+    	  get.addHeader("Accept", "application/json;odata=nometadata"); // lean payload
+    	
+    	  var res = client.execute(get);
+    	  var code = res.getCode();
+    	  var body = org.apache.hc.core5.http.io.entity.EntityUtils.toString(res.getEntity());
+    	
+    	  if (code >= 200 && code < 300) {
+    		log.warn("Response: " + body);
+    	    var json = JSON.parse(body); // Rhino has JSON by default
+    		var items = json.value || json.d && json.d.results || [];
+    		for each (var it in items) data.push(it);
+    		
+    		// Next link can be @odata.nextLink or __next depending on payload style
+     	    url = json[''odata.nextLink''] || (json.d && json.d.__next) || null;
+    		log.warn("Next URL : " + url);
+    	  } else {
+    	    throw "HTTP " + code + " from SharePoint: " + body;
+    	  }
+      	}
     }
     '
 ↓object [steps.JsonToXmlStep-1757407925802]: 
@@ -80,6 +93,9 @@ comment: List Items from a Sharepoint list
     - ↑traceable: false
     - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: '-1'
+↓pageSize [variables.RequestableVariable-1757429481527]: 
+  comment: The number of items in a page
+  value: 1
 ↓TestOK [core.TestCase]: 
   ↓domain [variables.TestCaseVariable-1757337121099]: 
     comment: The NT Domain

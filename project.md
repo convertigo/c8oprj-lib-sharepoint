@@ -25,7 +25,7 @@ does nothing
 
 ## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListGetItems
 
-List Items from a Sharepoint list
+List Items from a Sharepoint list. Will automatically paginate handling page sizes
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -44,6 +44,14 @@ comment
 </td>
 <td>
 The NT Domain
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;pageSize
+</td>
+<td>
+The number of items in a page
 </td>
 </tr>
 <tr>
