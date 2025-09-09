@@ -27,13 +27,13 @@ For more technical informations : [documentation](./project.md)
      <tr><td>To contribute</td><td>
 
      ```
-     lib_Sharepoint=/Users/olivierpicciotto/FormsWorkspace/lib_Sharepoint/.git:branch=master
+     lib_Sharepoint=https://github.com/convertigo/c8oprj-lib-sharepoint.git:branch=master
      ```
      </td></tr>
      <tr><td>To simply use</td><td>
 
      ```
-     lib_Sharepoint=/Users/olivierpicciotto/FormsWorkspace/lib_Sharepoint//archive/master.zip
+     lib_Sharepoint=https://github.com/convertigo/c8oprj-lib-sharepoint/archive/master.zip
      ```
      </td></tr>
     </table>
@@ -53,16 +53,16 @@ List Items from a Sharepoint list
 <th>name</th><th>comment</th>
 </tr>
 <tr>
-<td>domain</td><td></td>
+<td>domain</td><td>The NT Domain</td>
 </tr>
 <tr>
-<td>password</td><td></td>
+<td>password</td><td>User's password</td>
 </tr>
 <tr>
-<td>sharepointBase</td><td></td>
+<td>sharepointBase</td><td>Sharepoint base as http(s)://server/mysite</td>
 </tr>
 <tr>
-<td>username</td><td></td>
+<td>username</td><td>User accessing the list</td>
 </tr>
 </table>
 

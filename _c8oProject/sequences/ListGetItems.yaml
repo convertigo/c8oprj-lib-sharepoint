@@ -63,14 +63,18 @@ comment: List Items from a Sharepoint list
         - ↑mode: PLAIN
         - →→: SharePointList
 ↓domain [variables.RequestableVariable-1757336196039]: 
+  comment: The NT Domain
 ↓username [variables.RequestableVariable-1757337058825]: 
+  comment: User accessing the list
 ↓password [variables.RequestableVariable-1757337070503]: 
+  comment: User's password
   value: 
     - ↑ciphered: true
     - ↑traceable: false
     - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: '-1'
 ↓sharepointBase [variables.RequestableVariable-1757337093225]: 
+  comment: Sharepoint base as http(s)://server/mysite
   value: 
     - ↑ciphered: true
     - ↑traceable: false

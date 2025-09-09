@@ -43,7 +43,7 @@ comment
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;domain
 </td>
 <td>
-
+The NT Domain
 </td>
 </tr>
 <tr>
@@ -51,7 +51,7 @@ comment
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;password
 </td>
 <td>
-
+User's password
 </td>
 </tr>
 <tr>
@@ -59,7 +59,7 @@ comment
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sharepointBase
 </td>
 <td>
-
+Sharepoint base as http(s)://server/mysite
 </td>
 </tr>
 <tr>
@@ -67,7 +67,7 @@ comment
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;username
 </td>
 <td>
-
+User accessing the list
 </td>
 </tr>
 </table>
