@@ -95,7 +95,7 @@ comment: List Items from a Sharepoint list. Will automatically paginate handling
   visibility: '-1'
 ↓pageSize [variables.RequestableVariable-1757429481527]: 
   comment: The number of items in a page
-  value: 1
+  value: 100
 ↓TestOK [core.TestCase]: 
   ↓domain [variables.TestCaseVariable-1757337121099]: 
     comment: The NT Domain
