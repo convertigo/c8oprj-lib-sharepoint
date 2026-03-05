@@ -1,6 +1,5 @@
 accessibility: Private
-authenticatedContextRequired: false
-comment: Builds a flat JAR for Microsoft Graph Java SDK and stores it under .//libs
+comment: Builds a flat JAR for Microsoft Graph Java SDK and stores it under .//libs (no Microsoft Graph permission required)
 ↓EnsureLibsDirectory [steps.CreateDirectoryStep-1772619630735]: 
   comment: Ensures the local libs directory exists
   destinationPath: '''.//libs'''

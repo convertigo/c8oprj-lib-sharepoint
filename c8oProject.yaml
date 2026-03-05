@@ -1,12 +1,34 @@
 ↑convertigo: 8.0.0.m006
-↓lib_Sharepoint [core.Project]: 
+↓lib_Microsoft_Sharepoint [core.Project]: 
   comment: |
-    This is is the Sharepoint Connector for Convertigo. Use this connector to access On premises versions of SharePoint server. This connector will not work to access Azure Cloud Sharepoint Services
-    
+    SharePoint Online connector for Convertigo.
+    Uses Microsoft Graph to resolve sites, lists and drives, then perform read/write/share operations on SharePoint Online content.
   contextTimeout: 59
   corsOrigin: =Origin
   httpSessionTimeout: 60
   version: 0.0.1
   ↓void [connectors.SqlConnector]: 🗏 connectors/void.yaml
   ↓BuildGraphFlatJar [sequences.GenericSequence]: 🗏 sequences/BuildGraphFlatJar.yaml
+  ↓CopyDriveItem [sequences.GenericSequence]: 🗏 sequences/CopyDriveItem.yaml
+  ↓CreateDriveFolder [sequences.GenericSequence]: 🗏 sequences/CreateDriveFolder.yaml
+  ↓CreateDriveItemShareLink [sequences.GenericSequence]: 🗏 sequences/CreateDriveItemShareLink.yaml
+  ↓CreateListItem [sequences.GenericSequence]: 🗏 sequences/CreateListItem.yaml
+  ↓DeleteDriveItem [sequences.GenericSequence]: 🗏 sequences/DeleteDriveItem.yaml
+  ↓DeleteDriveItemPermission [sequences.GenericSequence]: 🗏 sequences/DeleteDriveItemPermission.yaml
+  ↓DeleteListItem [sequences.GenericSequence]: 🗏 sequences/DeleteListItem.yaml
+  ↓DownloadDriveItemContent [sequences.GenericSequence]: 🗏 sequences/DownloadDriveItemContent.yaml
+  ↓GetDriveItem [sequences.GenericSequence]: 🗏 sequences/GetDriveItem.yaml
+  ↓GetGraphAccessToken [sequences.GenericSequence]: 🗏 sequences/GetGraphAccessToken.yaml
+  ↓GetListItem [sequences.GenericSequence]: 🗏 sequences/GetListItem.yaml
+  ↓InviteDriveItemRecipients [sequences.GenericSequence]: 🗏 sequences/InviteDriveItemRecipients.yaml
+  ↓ListDriveItemPermissions [sequences.GenericSequence]: 🗏 sequences/ListDriveItemPermissions.yaml
+  ↓ListDriveItems [sequences.GenericSequence]: 🗏 sequences/ListDriveItems.yaml
   ↓ListGetItems [sequences.GenericSequence]: 🗏 sequences/ListGetItems.yaml
+  ↓MoveDriveItem [sequences.GenericSequence]: 🗏 sequences/MoveDriveItem.yaml
+  ↓ResolveDrive [sequences.GenericSequence]: 🗏 sequences/ResolveDrive.yaml
+  ↓ResolveList [sequences.GenericSequence]: 🗏 sequences/ResolveList.yaml
+  ↓ResolveSite [sequences.GenericSequence]: 🗏 sequences/ResolveSite.yaml
+  ↓UpdateDriveItem [sequences.GenericSequence]: 🗏 sequences/UpdateDriveItem.yaml
+  ↓UpdateListItem [sequences.GenericSequence]: 🗏 sequences/UpdateListItem.yaml
+  ↓UploadDriveItemContent [sequences.GenericSequence]: 🗏 sequences/UploadDriveItemContent.yaml
+  ↓UploadDriveItemLargeContent [sequences.GenericSequence]: 🗏 sequences/UploadDriveItemLargeContent.yaml

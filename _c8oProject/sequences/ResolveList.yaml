@@ -1,10 +1,10 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Lists SharePoint Online list items through Microsoft Graph with OData pagination and field projection. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
-↓inputVars [steps.InputVariablesStep-1772620727682]: 
+comment: Resolves a SharePoint Online list by site and list name using Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+↓inputVars [steps.InputVariablesStep-1772620734382]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
-↓ExecuteListGetItems [steps.SimpleStep-1772620727748]: 
-  comment: Calls Microsoft Graph list items endpoint with optional select/filter/orderby and follows @odata.nextLink.
+↓ExecuteResolveList [steps.SimpleStep-1772620734451]: 
+  comment: Resolves site and list identifiers through Microsoft Graph endpoints.
   expression: |
     'var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
@@ -23,25 +23,6 @@ comment: Lists SharePoint Online list items through Microsoft Graph with OData p
     		throw new java.lang.IllegalArgumentException("Missing required input: " + name);
     	}
     	return String(value);
-    };
-    
-    var gs_toBoolean = function(value, defaultValue) {
-    	if (value === null || value === undefined || String(value).trim().length === 0) {
-    		return defaultValue === true;
-    	}
-    	var normalized = String(value).toLowerCase();
-    	return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "y";
-    };
-    
-    var gs_parseInteger = function(name, value, defaultValue) {
-    	if (gs_isBlank(value)) {
-    		return defaultValue;
-    	}
-    	var parsed = parseInt(String(value), 10);
-    	if (isNaN(parsed)) {
-    		throw new java.lang.IllegalArgumentException("Invalid integer for " + name + ": " + value);
-    	}
-    	return parsed;
     };
     
     var gs_errorClass = function(error) {
@@ -236,98 +217,23 @@ comment: Lists SharePoint Online list items through Microsoft Graph with OData p
     	return String(value).split("''").join("''");
     };
     
-    var gs_resolveSiteAndList = function(token, siteIdValue, siteHostnameValue, sitePathValue, listIdValue, listNameValue) {
-    	var resolvedSiteId = gs_safeString(siteIdValue);
-    	var resolvedSiteHostname = "";
-    	var resolvedSitePath = "";
-    
-    	if (gs_isBlank(resolvedSiteId)) {
-    		resolvedSiteHostname = gs_require("siteHostname", siteHostnameValue).toLowerCase();
-    		resolvedSitePath = gs_normalizeSitePath(sitePathValue);
-    		var siteEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" +
-    			resolvedSiteHostname +
-    			":" +
-    			gs_encodeSitePath(resolvedSitePath) +
-    			"?$select=id,webUrl,name,displayName";
-    		var siteObject = gs_graphGetJson(siteEndpoint, token);
-    		resolvedSiteId = gs_require("siteId", siteObject.id);
+    var gs_normalizeListEntry = function(listObject) {
+    	if (listObject === null || listObject === undefined) {
+    		return null;
     	}
-    
-    	var resolvedListId = gs_safeString(listIdValue);
-    	var requestedListName = gs_safeString(listNameValue);
-    	if (gs_isBlank(resolvedListId) && gs_isBlank(requestedListName)) {
-    		throw new java.lang.IllegalArgumentException("Provide listId or listName");
-    	}
-    
-    	var listObject = null;
-    	if (!gs_isBlank(resolvedListId)) {
-    		var byIdEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
-    			"/lists/" + gs_encodePathSegment(resolvedListId) +
-    			"?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
-    		listObject = gs_graphGetJson(byIdEndpoint, token);
-    	} else {
-    		var queryEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
-    			"/lists?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
-    		var lookup = gs_odataEscapeString(requestedListName);
-    		queryEndpoint = gs_appendQueryParam(queryEndpoint, "$filter", "displayName eq ''" + lookup + "''");
-    		var queryObject = gs_graphGetJson(queryEndpoint, token);
-    		if (!(queryObject.value instanceof Array) || queryObject.value.length === 0) {
-    			throw new java.lang.RuntimeException("List not found: " + requestedListName);
-    		}
-    		listObject = queryObject.value[0];
-    		resolvedListId = gs_safeString(listObject.id);
-    	}
-    
     	return {
-    		siteId: resolvedSiteId,
-    		siteHostname: resolvedSiteHostname,
-    		sitePath: resolvedSitePath,
-    		listId: gs_safeString(resolvedListId),
-    		listName: gs_safeString(listObject.name),
-    		listDisplayName: gs_safeString(listObject.displayName),
-    		listWebUrl: gs_safeString(listObject.webUrl),
-    		listInfo: listObject.list === undefined || listObject.list === null ? {} : listObject.list,
-    		sharepointIds: listObject.sharepointIds === undefined || listObject.sharepointIds === null ? {} : listObject.sharepointIds
+    		listId: gs_safeString(listObject.id),
+    		name: gs_safeString(listObject.name),
+    		displayName: gs_safeString(listObject.displayName),
+    		webUrl: gs_safeString(listObject.webUrl),
+    		createdDateTime: gs_safeString(listObject.createdDateTime),
+    		lastModifiedDateTime: gs_safeString(listObject.lastModifiedDateTime),
+    		sharepointIds: listObject.sharepointIds === undefined || listObject.sharepointIds === null ? {} : listObject.sharepointIds,
+    		list: listObject.list === undefined || listObject.list === null ? {} : listObject.list
     	};
     };
     
-    var gs_splitCsv = function(csvValue) {
-    	if (gs_isBlank(csvValue)) {
-    		return [];
-    	}
-    	var rawParts = String(csvValue).split(",");
-    	var normalized = [];
-    	var i;
-    	for (i = 0; i < rawParts.length; i++) {
-    		var trimmed = String(rawParts[i]).trim();
-    		if (trimmed.length > 0) {
-    			normalized.push(trimmed);
-    		}
-    	}
-    	return normalized;
-    };
-    
-    var gs_normalizeItem = function(itemObject, includeRaw) {
-    	var mapped = {
-    		itemId: gs_safeString(itemObject.id),
-    		eTag: gs_safeString(itemObject.eTag),
-    		createdDateTime: gs_safeString(itemObject.createdDateTime),
-    		lastModifiedDateTime: gs_safeString(itemObject.lastModifiedDateTime),
-    		webUrl: gs_safeString(itemObject.webUrl),
-    		contentType: itemObject.contentType === undefined || itemObject.contentType === null ? {} : itemObject.contentType,
-    		fields: itemObject.fields === undefined || itemObject.fields === null ? {} : itemObject.fields,
-    		sharepointIds: itemObject.sharepointIds === undefined || itemObject.sharepointIds === null ? {} : itemObject.sharepointIds
-    	};
-    	if (includeRaw) {
-    		mapped.raw = itemObject;
-    	}
-    	return mapped;
-    };
-    
-    var graphOperation = "list_items";
+    var graphOperation = "resolve_list";
     var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
@@ -336,95 +242,71 @@ comment: Lists SharePoint Online list items through Microsoft Graph with OData p
     	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
     	tokenMode = tokenInfo.mode;
     
-    	var pageTop = gs_parseInteger("top", top, 100);
-    	if (pageTop < 1) {
-    		pageTop = 1;
+    	var resolvedSiteId = gs_safeString(siteId);
+    	var resolvedSiteHostname = "";
+    	var resolvedSitePath = "";
+    	if (gs_isBlank(resolvedSiteId)) {
+    		resolvedSiteHostname = gs_require("siteHostname", siteHostname).toLowerCase();
+    		resolvedSitePath = gs_normalizeSitePath(sitePath);
+    		var siteEndpoint =
+    			"https://graph.microsoft.com/v1.0/sites/" +
+    			resolvedSiteHostname +
+    			":" +
+    			gs_encodeSitePath(resolvedSitePath) +
+    			"?$select=id,webUrl,name,displayName";
+    		var siteObject = gs_graphGetJson(siteEndpoint, tokenInfo.token);
+    		resolvedSiteId = gs_require("siteId", siteObject.id);
+    	} else {
+    		resolvedSiteId = String(resolvedSiteId);
     	}
-    	if (pageTop > 999) {
-    		pageTop = 999;
+    
+    	var explicitListId = gs_safeString(listId);
+    	var requestedListName = gs_safeString(listName);
+    	if (gs_isBlank(explicitListId) && gs_isBlank(requestedListName)) {
+    		throw new java.lang.IllegalArgumentException("Provide listId or listName");
     	}
     
-    	var maxPageCount = gs_parseInteger("maxPages", maxPages, 20);
-    	if (maxPageCount < 1) {
-    		maxPageCount = 1;
-    	}
-    	if (maxPageCount > 100) {
-    		maxPageCount = 100;
-    	}
-    
-    	var includeRaw = gs_toBoolean(includeRawItem, false);
-    	var shouldExpandFields = gs_toBoolean(expandFields, true);
-    	var selectedFields = gs_splitCsv(selectFields);
-    
-    	var resolved = gs_resolveSiteAndList(
-    		tokenInfo.token,
-    		siteId,
-    		siteHostname,
-    		sitePath,
-    		listId,
-    		listName
-    	);
-    
-    	var requestUrl =
-    		"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolved.siteId) +
-    		"/lists/" + gs_encodePathSegment(resolved.listId) +
-    		"/items";
-    
-    	if (shouldExpandFields) {
-    		var expandValue = "fields";
-    		if (selectedFields.length > 0) {
-    			expandValue = "fields($select=" + selectedFields.join(",") + ")";
+    	var normalizedList = null;
+    	if (!gs_isBlank(explicitListId)) {
+    		var byIdEndpoint =
+    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
+    			"/lists/" + gs_encodePathSegment(explicitListId) +
+    			"?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
+    		normalizedList = gs_normalizeListEntry(gs_graphGetJson(byIdEndpoint, tokenInfo.token));
+    	} else {
+    		var queryEndpoint =
+    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
+    			"/lists?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
+    		if (!gs_isBlank(requestedListName)) {
+    			var lookup = gs_odataEscapeString(requestedListName);
+    			queryEndpoint = gs_appendQueryParam(queryEndpoint, "$filter", "displayName eq ''" + lookup + "''");
     		}
-    		requestUrl = gs_appendQueryParam(requestUrl, "$expand", expandValue);
-    	}
-    	requestUrl = gs_appendQueryParam(requestUrl, "$top", String(pageTop));
-    	requestUrl = gs_appendQueryParam(requestUrl, "$orderby", gs_safeString(orderBy));
-    	requestUrl = gs_appendQueryParam(requestUrl, "$filter", gs_safeString(filter));
-    
-    	var items = [];
-    	var nextUrl = requestUrl;
-    	var pageCount = 0;
-    	while (!gs_isBlank(nextUrl) && pageCount < maxPageCount) {
-    		var page = gs_graphGetJson(nextUrl, tokenInfo.token);
-    		if (page.value instanceof Array) {
-    			var i;
-    			for (i = 0; i < page.value.length; i++) {
-    				items.push(gs_normalizeItem(page.value[i], includeRaw));
-    			}
+    		var queryObject = gs_graphGetJson(queryEndpoint, tokenInfo.token);
+    		var values = queryObject.value;
+    		if (!(values instanceof Array) || values.length === 0) {
+    			throw new java.lang.RuntimeException("List not found: " + requestedListName);
     		}
-    		pageCount++;
-    		nextUrl = page["@odata.nextLink"] === undefined || page["@odata.nextLink"] === null ? "" : String(page["@odata.nextLink"]);
+    		normalizedList = gs_normalizeListEntry(values[0]);
     	}
     
     	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
-    		siteId: resolved.siteId,
-    		siteHostname: resolved.siteHostname,
-    		sitePath: resolved.sitePath,
-    		listId: resolved.listId,
-    		listName: resolved.listName,
-    		listDisplayName: resolved.listDisplayName,
-    		listWebUrl: resolved.listWebUrl,
-    		sharepointIds: resolved.sharepointIds,
-    		listInfo: resolved.listInfo,
-    		count: items.length,
-    		pagesFetched: pageCount,
-    		hasMore: !gs_isBlank(nextUrl),
-    		nextLink: gs_safeString(nextUrl),
-    		query: {
-    			top: pageTop,
-    			maxPages: maxPageCount,
-    			orderBy: gs_safeString(orderBy),
-    			filter: gs_safeString(filter),
-    			selectFields: selectedFields,
-    			expandFields: shouldExpandFields,
-    			includeRawItem: includeRaw
-    		},
-    		items: items
+    		siteId: resolvedSiteId,
+    		siteHostname: resolvedSiteHostname,
+    		sitePath: resolvedSitePath,
+    		listId: normalizedList.listId,
+    		listName: normalizedList.name,
+    		listDisplayName: normalizedList.displayName,
+    		webUrl: normalizedList.webUrl,
+    		createdDateTime: normalizedList.createdDateTime,
+    		lastModifiedDateTime: normalizedList.lastModifiedDateTime,
+    		listInfo: normalizedList.list,
+    		sharepointIds: normalizedList.sharepointIds,
+    		tokenPreview: tokenInfo.token.length > 20 ? tokenInfo.token.substring(0, 20) + "..." : tokenInfo.token
     	});
     } catch (e) {
     	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
     }'
-↓response [steps.JsonToXmlStep-1772620727818]: 
+↓response [steps.JsonToXmlStep-1772620734525]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
     - xmlizable: 
@@ -438,60 +320,34 @@ comment: Lists SharePoint Online list items through Microsoft Graph with OData p
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
-↓siteId [variables.RequestableVariable-1772620727896]: 
+↓siteId [variables.RequestableVariable-1772620734607]: 
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
-↓siteHostname [variables.RequestableVariable-1772620727984]: 
+↓siteHostname [variables.RequestableVariable-1772620734697]: 
   comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
   description: SharePoint Online hostname
-↓sitePath [variables.RequestableVariable-1772620728080]: 
+↓sitePath [variables.RequestableVariable-1772620734793]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
   value: /sites/convertigo
-↓listId [variables.RequestableVariable-1772620728187]: 
+↓listId [variables.RequestableVariable-1772620734897]: 
   comment: Optional list identifier. If provided, listName is ignored.
   description: Optional Graph list identifier
-↓listName [variables.RequestableVariable-1772620728309]: 
+↓listName [variables.RequestableVariable-1772620735012]: 
   comment: List display name or internal name used to resolve listId.
   description: SharePoint list name
-↓top [variables.RequestableVariable-1772620728431]: 
-  comment: Maximum number of items requested per Graph page.
-  description: Page size
-  value: 100.0
-↓maxPages [variables.RequestableVariable-1772620728562]: 
-  comment: Maximum number of Graph pages fetched before stopping pagination.
-  description: Maximum pages
-  value: 20.0
-↓orderBy [variables.RequestableVariable-1772620728702]: 
-  comment: Optional OData order by expression.
-  description: OData order by
-  value: id asc
-↓filter [variables.RequestableVariable-1772620728849]: 
-  comment: Optional OData filter expression.
-  description: OData filter expression
-↓selectFields [variables.RequestableVariable-1772620729027]: 
-  comment: Optional comma-separated list of field internal names projected in fields object.
-  description: Comma-separated field selection
-↓expandFields [variables.RequestableVariable-1772620729190]: 
-  comment: true includes fields expansion in Graph query.
-  description: Expand fields object
-  value: true
-↓includeRawItem [variables.RequestableVariable-1772620729363]: 
-  comment: true includes raw Graph item payload under each result item.
-  description: Include raw Graph payload
-  value: false
-↓accessToken [variables.RequestableVariable-1772620729543]: 
+↓accessToken [variables.RequestableVariable-1772620735132]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
-↓tenantId [variables.RequestableVariable-1772620729738]: 
+↓tenantId [variables.RequestableVariable-1772620735264]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
   value: ${Microsoft_AzGraph.tenantId}
-↓clientId [variables.RequestableVariable-1772620729955]: 
+↓clientId [variables.RequestableVariable-1772620735399]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
   value: ${Microsoft_AzGraph.clientId}
-↓clientSecret [variables.RequestableVariable-1772620730163]: 
+↓clientSecret [variables.RequestableVariable-1772620735546]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
   value: 
@@ -499,12 +355,10 @@ comment: Lists SharePoint Online list items through Microsoft Graph with OData p
     - ↑traceable: false
     - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
   visibility: '-1'
-↓TC_ListGetItems [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772620733521]: 
+↓TC_ResolveList [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772620737436]: 
     value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772620733594]: 
+  ↓sitePath [variables.TestCaseVariable-1772620737497]: 
     value: /sites/test1
-  ↓listName [variables.TestCaseVariable-1772620733666]: 
+  ↓listName [variables.TestCaseVariable-1772620737564]: 
     value: Web Template Extensions
-  ↓top [variables.TestCaseVariable-1772620733745]: 
-    value: 50.0

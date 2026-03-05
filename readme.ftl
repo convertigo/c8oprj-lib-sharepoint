@@ -80,6 +80,16 @@
   <#return key>
 </#function>
 
+<#-- toHttpsRemoteUrl: rewrites git SSH GitHub remote URLs to HTTPS -->
+<#function toHttpsRemoteUrl url>
+  <#assign value = (url!"")?trim>
+  <#assign value = value?replace("=ssh://git@github.com/", "=https://github.com/")>
+  <#assign value = value?replace("=git@github.com:", "=https://github.com/")>
+  <#assign value = value?replace("ssh://git@github.com/", "https://github.com/")>
+  <#assign value = value?replace("git@github.com:", "https://github.com/")>
+  <#return value>
+</#function>
+
 <#-- MACROS -->
 <#-- header: generates a header with given text as heading and add it to TOC with its anchor link -->
 <#macro header toc anchors heading text>
@@ -127,12 +137,12 @@ ${title}${lineBreak}
      <tr><td>Usage</td><td>Click the copy button at the end of the line</td></tr>
      <tr><td>To contribute</td><td>${lineBreak}
      ```
-     ${project.contributeUrl}
+     ${toHttpsRemoteUrl(project.contributeUrl)}
      ```
      </td></tr>
      <tr><td>To simply use</td><td>${lineBreak}
      ```
-     ${project.usageUrl}
+     ${toHttpsRemoteUrl(project.usageUrl)}
      ```
      </td></tr>
     </table>
@@ -149,12 +159,12 @@ ${title}${lineBreak}
      <tr><td>Usage</td><td>Cliquez sur le bouton de copie en fin de ligne</td></tr>
      <tr><td>Pour contribuer</td><td>${lineBreak}
      ```
-     ${lineBreak}${project.contributeUrl}
+     ${lineBreak}${toHttpsRemoteUrl(project.contributeUrl)}
      ```
      </td></tr>
      <tr><td>Pour simplement utiliser</td><td>${lineBreak}
      ```
-     ${lineBreak}${project.usageUrl}
+     ${lineBreak}${toHttpsRemoteUrl(project.usageUrl)}
      ```
      </td></tr>
     </table>
@@ -189,6 +199,72 @@ ${lineBreak}
 <#if on("installation") && (project.url?length > 0) && (project.url != project.name)>
 	<@header toc=toc anchors=anchors heading="##" text=help("installation") />
 	<@installation />
+</#if>
+<#if locale == "US">
+	<@header toc=toc anchors=anchors heading="##" text="Configuration Symbols" />
+These symbols can be set at project level and reused by all sequences.
+
+<table>
+<tr><th>Symbol</th><th>Required</th><th>Secret</th><th>Purpose</th></tr>
+<tr><td><code><#noparse>${Microsoft_AzGraph.tenantId}</#noparse></code></td><td>Yes (app-only)</td><td>No</td><td>Azure Entra tenant ID.</td></tr>
+<tr><td><code><#noparse>${Microsoft_AzGraph.clientId}</#noparse></code></td><td>Yes (app-only)</td><td>No</td><td>Application (client) ID.</td></tr>
+<tr><td><code><#noparse>${Microsoft_AzGraph.clientSecret.secret}</#noparse></code></td><td>Yes (app-only)</td><td>Yes</td><td>Application client secret.</td></tr>
+</table>
+
+	<@header toc=toc anchors=anchors heading="##" text="Authentication Model" />
+- Delegated mode: pass `accessToken`; tenant/client/secret are ignored.
+- Application mode: leave `accessToken` empty and provide tenant/client/secret.
+- All online Graph sequences are `Hidden` and `authenticatedContextRequired=true`.
+- Sequence responses expose `tokenMode` (`delegated` or `application`) for diagnostics.
+
+	<@header toc=toc anchors=anchors heading="##" text="Required Azure Permissions" />
+Grant Microsoft Graph **Application** permissions, then click `Grant admin consent`.
+
+<table>
+<tr><th>Functional scope</th><th>Sequences</th><th>Graph permissions (Application)</th><th>Notes</th></tr>
+<tr><td>Site and list discovery/read</td><td><code>ResolveSite</code>, <code>ResolveList</code>, <code>ListGetItems</code>, <code>GetListItem</code></td><td><code>Sites.Read.All</code> (or <code>Sites.ReadWrite.All</code>)</td><td>Use <code>Sites.ReadWrite.All</code> when list write operations are required.</td></tr>
+<tr><td>Drive discovery/read</td><td><code>ResolveDrive</code>, <code>ListDriveItems</code>, <code>GetDriveItem</code>, <code>DownloadDriveItemContent</code>, <code>ListDriveItemPermissions</code></td><td><code>Files.Read.All</code> + <code>Sites.Read.All</code> (or write variants)</td><td>Some tenants require both Files and Sites scopes for drive metadata traversal.</td></tr>
+<tr><td>List write operations</td><td><code>CreateListItem</code>, <code>UpdateListItem</code>, <code>DeleteListItem</code></td><td><code>Sites.ReadWrite.All</code></td><td>Targets SharePoint list items through <code>/sites/{siteId}/lists/{listId}</code>.</td></tr>
+<tr><td>Drive write operations</td><td><code>CreateDriveFolder</code>, <code>UpdateDriveItem</code>, <code>DeleteDriveItem</code>, <code>MoveDriveItem</code>, <code>CopyDriveItem</code>, <code>UploadDriveItemContent</code>, <code>UploadDriveItemLargeContent</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td><td><code>CopyDriveItem</code> is asynchronous and returns a monitor URL.</td></tr>
+<tr><td>Sharing and permission updates</td><td><code>CreateDriveItemShareLink</code>, <code>InviteDriveItemRecipients</code>, <code>DeleteDriveItemPermission</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td><td>Invite and link creation can also be constrained by SharePoint external sharing policy.</td></tr>
+<tr><td>Token helper</td><td><code>GetGraphAccessToken</code></td><td>No direct Graph API call</td><td>Acquires token from Entra ID; downstream sequence still needs Graph roles.</td></tr>
+<tr><td>Local tooling</td><td><code>BuildGraphFlatJar</code></td><td>None</td><td>Builds local SDK JAR, no online call.</td></tr>
+</table>
+
+	<@header toc=toc anchors=anchors heading="##" text="Permissions by Sequence" />
+<table>
+<tr><th>Sequence</th><th>Graph permissions (Application)</th></tr>
+<tr><td><code>BuildGraphFlatJar</code></td><td>None</td></tr>
+<tr><td><code>GetGraphAccessToken</code></td><td>None direct; downstream usually <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ResolveSite</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ResolveList</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ResolveDrive</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code> + <code>Files.Read.All</code> or <code>Files.ReadWrite.All</code></td></tr>
+<tr><td><code>ListGetItems</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>GetListItem</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>CreateListItem</code></td><td><code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>UpdateListItem</code></td><td><code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>DeleteListItem</code></td><td><code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ListDriveItems</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>GetDriveItem</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>DownloadDriveItemContent</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>CreateDriveFolder</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>UpdateDriveItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>DeleteDriveItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>MoveDriveItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>CopyDriveItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>UploadDriveItemContent</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>UploadDriveItemLargeContent</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>CreateDriveItemShareLink</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>InviteDriveItemRecipients</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ListDriveItemPermissions</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>DeleteDriveItemPermission</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+</table>
+
+	<@header toc=toc anchors=anchors heading="##" text="Known Limitations" />
+- If app roles do not include SharePoint scopes, Graph returns `accessDenied` even if token acquisition succeeds.
+- `Sites.Selected` requires explicit grant on target sites; otherwise all calls return `403`.
+- List item identifiers (usually numeric strings) and drive item identifiers (Graph opaque ids) are different and not interchangeable.
+- `CopyDriveItem` returns an asynchronous monitor URL; completion must be polled by client code.
 </#if>
 <#if on("references") && has(project,"references")>
   	<@header toc=toc anchors=anchors heading="##" text=help("references") />
@@ -294,4 +370,3 @@ ${help("more.info")} : [documentation](./project.md)
 
 <#-- output project content -->
 ${content}
-

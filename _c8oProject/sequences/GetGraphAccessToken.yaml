@@ -1,0 +1,271 @@
+accessibility: Hidden
+authenticatedContextRequired: true
+comment: Resolves a delegated or app-only Microsoft Graph access token for SharePoint Online operations. (Graph permissions for downstream calls Sites.Read.All|Sites.ReadWrite.All)
+↓inputVars [steps.InputVariablesStep-1772620200592]: 
+  comment: Exposes request inputs in XML for debugging and source mapping.
+↓ExecuteGetGraphAccessToken [steps.SimpleStep-1772620200737]: 
+  comment: Resolves delegated token fallback or acquires app-only token from Microsoft Entra ID.
+  expression: |
+    'var gs_isBlank = function(value) {
+    	return value === null || value === undefined || String(value).trim().length === 0;
+    };
+    
+    var gs_safeString = function(value) {
+    	return value === null || value === undefined ? "" : String(value);
+    };
+    
+    var gs_defaultString = function(value, defaultValue) {
+    	return gs_isBlank(value) ? defaultValue : String(value);
+    };
+    
+    var gs_require = function(name, value) {
+    	if (gs_isBlank(value)) {
+    		throw new java.lang.IllegalArgumentException("Missing required input: " + name);
+    	}
+    	return String(value);
+    };
+    
+    var gs_toBoolean = function(value, defaultValue) {
+    	if (value === null || value === undefined || String(value).trim().length === 0) {
+    		return defaultValue === true;
+    	}
+    	var normalized = String(value).toLowerCase();
+    	return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "y";
+    };
+    
+    var gs_errorClass = function(error) {
+    	try {
+    		if (error && error.javaException) {
+    			return String(error.javaException.getClass().getName());
+    		}
+    		if (error && error.getClass) {
+    			return String(error.getClass().getName());
+    		}
+    	} catch (ignore) {
+    	}
+    	return "";
+    };
+    
+    var gs_responseOk = function(graphOperation, tokenMode, requiredPermission, data) {
+    	return {
+    		ok: true,
+    		status: "OK",
+    		graphOperation: graphOperation,
+    		tokenMode: tokenMode,
+    		requiredPermission: requiredPermission,
+    		data: data
+    	};
+    };
+    
+    var gs_responseError = function(graphOperation, tokenMode, requiredPermission, error) {
+    	var message = "";
+    	try {
+    		message = String(error.message);
+    	} catch (ignoreMessage) {
+    		message = String(error);
+    	}
+    	return {
+    		ok: false,
+    		status: "ERROR",
+    		graphOperation: graphOperation,
+    		tokenMode: tokenMode,
+    		requiredPermission: requiredPermission,
+    		errorClass: gs_errorClass(error),
+    		errorMessage: message
+    	};
+    };
+    
+    var gs_readAll = function(inputStream) {
+    	if (inputStream === null) {
+    		return "";
+    	}
+    	var scanner = new java.util.Scanner(inputStream, "UTF-8").useDelimiter("\\A");
+    	try {
+    		return scanner.hasNext() ? String(scanner.next()) : "";
+    	} finally {
+    		try {
+    			scanner.close();
+    		} catch (ignoreScanner) {
+    		}
+    	}
+    };
+    
+    var gs_urlEncode = function(value) {
+    	return java.net.URLEncoder.encode(String(value), "UTF-8");
+    };
+    
+    var gs_httpRequest = function(method, endpoint, bearerToken, payload, contentType, accept) {
+    	var url = new java.net.URL(String(endpoint));
+    	var connection = url.openConnection();
+    	connection.setRequestMethod(String(method));
+    	connection.setDoInput(true);
+    	connection.setUseCaches(false);
+    	
+    	if (!gs_isBlank(accept)) {
+    		connection.setRequestProperty("Accept", String(accept));
+    	}
+    	if (!gs_isBlank(bearerToken)) {
+    		connection.setRequestProperty("Authorization", "Bearer " + String(bearerToken));
+    	}
+    	
+    	if (payload !== null && payload !== undefined) {
+    		connection.setDoOutput(true);
+    		if (!gs_isBlank(contentType)) {
+    			connection.setRequestProperty("Content-Type", String(contentType));
+    		}
+    		var output = connection.getOutputStream();
+    		try {
+    			output.write(new java.lang.String(String(payload)).getBytes("UTF-8"));
+    		} finally {
+    			output.close();
+    		}
+    	}
+    	
+    	var statusCode = connection.getResponseCode();
+    	var body = gs_readAll(statusCode >= 200 && statusCode < 300 ? connection.getInputStream() : connection.getErrorStream());
+    	return {
+    		statusCode: statusCode,
+    		body: body
+    	};
+    };
+    
+    var gs_acquireAppToken = function(tenantIdValue, clientIdValue, clientSecretValue, scopeValue) {
+    	var endpoint = "https://login.microsoftonline.com/" + gs_require("tenantId", tenantIdValue) + "/oauth2/v2.0/token";
+    	var payload =
+    		"client_id=" + gs_urlEncode(gs_require("clientId", clientIdValue)) +
+    		"&client_secret=" + gs_urlEncode(gs_require("clientSecret", clientSecretValue)) +
+    		"&scope=" + gs_urlEncode(gs_defaultString(scopeValue, "https://graph.microsoft.com/.default")) +
+    		"&grant_type=client_credentials";
+    	
+    	var tokenResponse = gs_httpRequest("POST", endpoint, "", payload, "application/x-www-form-urlencoded", "application/json");
+    	if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
+    		throw new java.lang.RuntimeException("Token endpoint failed (" + tokenResponse.statusCode + "): " + tokenResponse.body);
+    	}
+    	
+    	var parsed = JSON.parse(tokenResponse.body);
+    	if (!parsed || gs_isBlank(parsed.access_token)) {
+    		throw new java.lang.RuntimeException("Token endpoint returned no access_token");
+    	}
+    	
+    	return {
+    		mode: "application",
+    		token: String(parsed.access_token),
+    		tokenType: gs_safeString(parsed.token_type),
+    		expiresIn: parsed.expires_in === undefined ? 0 : parsed.expires_in,
+    		scope: gs_safeString(parsed.scope)
+    	};
+    };
+    
+    var gs_resolveToken = function(accessTokenValue, tenantIdValue, clientIdValue, clientSecretValue) {
+    	if (!gs_isBlank(accessTokenValue)) {
+    		return {
+    			mode: "delegated",
+    			token: String(accessTokenValue),
+    			tokenType: "Bearer",
+    			expiresIn: 0,
+    			scope: ""
+    		};
+    	}
+    	return gs_acquireAppToken(tenantIdValue, clientIdValue, clientSecretValue, "https://graph.microsoft.com/.default");
+    };
+    
+    var gs_decodeJwtPayload = function(jwtToken) {
+    	if (gs_isBlank(jwtToken)) {
+    		return null;
+    	}
+    	var parts = String(jwtToken).split(".");
+    	if (parts.length < 2 || gs_isBlank(parts[1])) {
+    		return null;
+    	}
+    	try {
+    		var decoded = String(parts[1]).split("-").join("+").split("_").join("/");
+    		while (decoded.length % 4 !== 0) {
+    			decoded += "=";
+    		}
+    		var bytes = java.util.Base64.getDecoder().decode(decoded);
+    		return JSON.parse(String(new java.lang.String(bytes, "UTF-8")));
+    	} catch (ignoreJwtDecode) {
+    		return null;
+    	}
+    };
+    
+    var graphOperation = "get_access_token";
+    var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All";
+    var tokenMode = "delegated_or_application";
+    response = null;
+    
+    try {
+    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    	tokenMode = tokenInfo.mode;
+    	
+    	var includePayload = gs_toBoolean(includeTokenPayload, true);
+    	var tokenPayload = includePayload ? gs_decodeJwtPayload(tokenInfo.token) : null;
+    	var payloadScopes = tokenPayload && !gs_isBlank(tokenPayload.scp) ? String(tokenPayload.scp).split(" ") : [];
+    	var payloadRoles = [];
+    	if (tokenPayload && tokenPayload.roles !== undefined && tokenPayload.roles !== null) {
+    		if (tokenPayload.roles instanceof Array) {
+    			payloadRoles = tokenPayload.roles;
+    		} else {
+    			payloadRoles = [String(tokenPayload.roles)];
+    		}
+    	}
+    	
+    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    		token: tokenInfo.token,
+    		tokenType: gs_defaultString(tokenInfo.tokenType, "Bearer"),
+    		expiresIn: tokenInfo.expiresIn,
+    		scope: gs_safeString(tokenInfo.scope),
+    		tokenPreview: tokenInfo.token.length > 20 ? tokenInfo.token.substring(0, 20) + "..." : tokenInfo.token,
+    		tokenPayload: tokenPayload === null ? {} : {
+    			aud: gs_safeString(tokenPayload.aud),
+    			tenantId: gs_safeString(tokenPayload.tid),
+    			appId: gs_safeString(tokenPayload.appid),
+    			upn: gs_safeString(tokenPayload.upn),
+    			expiresAtEpoch: tokenPayload.exp === undefined || tokenPayload.exp === null ? "" : String(tokenPayload.exp),
+    			scopes: payloadScopes,
+    			roles: payloadRoles
+    		}
+    	});
+    } catch (e) {
+    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    }'
+↓response [steps.JsonToXmlStep-1772620200867]: 
+  comment: Converts the JS response object into XML output.
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: response
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: response
+↓accessToken [variables.RequestableVariable-1772620200956]: 
+  comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+  description: Delegated Microsoft Graph access token
+↓tenantId [variables.RequestableVariable-1772620201050]: 
+  comment: Azure Entra tenant id used for app-only token acquisition.
+  description: Tenant id for app-only token
+  value: ${Microsoft_AzGraph.tenantId}
+↓clientId [variables.RequestableVariable-1772620201190]: 
+  comment: Azure Entra application client id used for app-only token acquisition.
+  description: Client id for app-only token
+  value: ${Microsoft_AzGraph.clientId}
+↓clientSecret [variables.RequestableVariable-1772620201311]: 
+  comment: Azure Entra application client secret used for app-only token acquisition.
+  description: Client secret for app-only token
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+  visibility: '-1'
+↓includeTokenPayload [variables.RequestableVariable-1772620201425]: 
+  comment: true decodes token payload claims for troubleshooting.
+  description: Include decoded token payload
+  value: true
+↓TC_GetGraphAccessToken [core.TestCase]: 
+  ↓includeTokenPayload [variables.TestCaseVariable-1772620203027]: 
+    value: true

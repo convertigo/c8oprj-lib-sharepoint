@@ -1,0 +1,287 @@
+accessibility: Hidden
+authenticatedContextRequired: true
+comment: Resolves a SharePoint Online site by hostname and site path using Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+↓inputVars [steps.InputVariablesStep-1772620203268]: 
+  comment: Exposes request inputs in XML for debugging and source mapping.
+↓ExecuteResolveSite [steps.SimpleStep-1772620203332]: 
+  comment: Calls Microsoft Graph sites endpoint to resolve site id and metadata.
+  expression: |
+    'var gs_isBlank = function(value) {
+    	return value === null || value === undefined || String(value).trim().length === 0;
+    };
+    
+    var gs_safeString = function(value) {
+    	return value === null || value === undefined ? "" : String(value);
+    };
+    
+    var gs_defaultString = function(value, defaultValue) {
+    	return gs_isBlank(value) ? defaultValue : String(value);
+    };
+    
+    var gs_require = function(name, value) {
+    	if (gs_isBlank(value)) {
+    		throw new java.lang.IllegalArgumentException("Missing required input: " + name);
+    	}
+    	return String(value);
+    };
+    
+    var gs_errorClass = function(error) {
+    	try {
+    		if (error && error.javaException) {
+    			return String(error.javaException.getClass().getName());
+    		}
+    		if (error && error.getClass) {
+    			return String(error.getClass().getName());
+    		}
+    	} catch (ignore) {
+    	}
+    	return "";
+    };
+    
+    var gs_responseOk = function(graphOperation, tokenMode, requiredPermission, data) {
+    	return {
+    		ok: true,
+    		status: "OK",
+    		graphOperation: graphOperation,
+    		tokenMode: tokenMode,
+    		requiredPermission: requiredPermission,
+    		data: data
+    	};
+    };
+    
+    var gs_responseError = function(graphOperation, tokenMode, requiredPermission, error) {
+    	var message = "";
+    	try {
+    		message = String(error.message);
+    	} catch (ignoreMessage) {
+    		message = String(error);
+    	}
+    	return {
+    		ok: false,
+    		status: "ERROR",
+    		graphOperation: graphOperation,
+    		tokenMode: tokenMode,
+    		requiredPermission: requiredPermission,
+    		errorClass: gs_errorClass(error),
+    		errorMessage: message
+    	};
+    };
+    
+    var gs_readAll = function(inputStream) {
+    	if (inputStream === null) {
+    		return "";
+    	}
+    	var scanner = new java.util.Scanner(inputStream, "UTF-8").useDelimiter("\\A");
+    	try {
+    		return scanner.hasNext() ? String(scanner.next()) : "";
+    	} finally {
+    		try {
+    			scanner.close();
+    		} catch (ignoreScanner) {
+    		}
+    	}
+    };
+    
+    var gs_urlEncode = function(value) {
+    	return java.net.URLEncoder.encode(String(value), "UTF-8");
+    };
+    
+    var gs_httpRequest = function(method, endpoint, bearerToken, payload, contentType, accept) {
+    	var url = new java.net.URL(String(endpoint));
+    	var connection = url.openConnection();
+    	connection.setRequestMethod(String(method));
+    	connection.setDoInput(true);
+    	connection.setUseCaches(false);
+    	
+    	if (!gs_isBlank(accept)) {
+    		connection.setRequestProperty("Accept", String(accept));
+    	}
+    	if (!gs_isBlank(bearerToken)) {
+    		connection.setRequestProperty("Authorization", "Bearer " + String(bearerToken));
+    	}
+    	
+    	if (payload !== null && payload !== undefined) {
+    		connection.setDoOutput(true);
+    		if (!gs_isBlank(contentType)) {
+    			connection.setRequestProperty("Content-Type", String(contentType));
+    		}
+    		var output = connection.getOutputStream();
+    		try {
+    			output.write(new java.lang.String(String(payload)).getBytes("UTF-8"));
+    		} finally {
+    			output.close();
+    		}
+    	}
+    	
+    	var statusCode = connection.getResponseCode();
+    	var body = gs_readAll(statusCode >= 200 && statusCode < 300 ? connection.getInputStream() : connection.getErrorStream());
+    	return {
+    		statusCode: statusCode,
+    		body: body
+    	};
+    };
+    
+    var gs_graphGetJson = function(endpoint, token) {
+    	var result = gs_httpRequest("GET", endpoint, token, null, "", "application/json");
+    	if (result.statusCode < 200 || result.statusCode >= 300) {
+    		throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
+    	}
+    	if (gs_isBlank(result.body)) {
+    		return {};
+    	}
+    	return JSON.parse(result.body);
+    };
+    
+    var gs_acquireAppToken = function(tenantIdValue, clientIdValue, clientSecretValue, scopeValue) {
+    	var endpoint = "https://login.microsoftonline.com/" + gs_require("tenantId", tenantIdValue) + "/oauth2/v2.0/token";
+    	var payload =
+    		"client_id=" + gs_urlEncode(gs_require("clientId", clientIdValue)) +
+    		"&client_secret=" + gs_urlEncode(gs_require("clientSecret", clientSecretValue)) +
+    		"&scope=" + gs_urlEncode(gs_defaultString(scopeValue, "https://graph.microsoft.com/.default")) +
+    		"&grant_type=client_credentials";
+    	
+    	var tokenResponse = gs_httpRequest("POST", endpoint, "", payload, "application/x-www-form-urlencoded", "application/json");
+    	if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
+    		throw new java.lang.RuntimeException("Token endpoint failed (" + tokenResponse.statusCode + "): " + tokenResponse.body);
+    	}
+    	
+    	var parsed = JSON.parse(tokenResponse.body);
+    	if (!parsed || gs_isBlank(parsed.access_token)) {
+    		throw new java.lang.RuntimeException("Token endpoint returned no access_token");
+    	}
+    	
+    	return {
+    		mode: "application",
+    		token: String(parsed.access_token),
+    		tokenType: gs_safeString(parsed.token_type),
+    		expiresIn: parsed.expires_in === undefined ? 0 : parsed.expires_in,
+    		scope: gs_safeString(parsed.scope)
+    	};
+    };
+    
+    var gs_resolveToken = function(accessTokenValue, tenantIdValue, clientIdValue, clientSecretValue) {
+    	if (!gs_isBlank(accessTokenValue)) {
+    		return {
+    			mode: "delegated",
+    			token: String(accessTokenValue),
+    			tokenType: "Bearer",
+    			expiresIn: 0,
+    			scope: ""
+    		};
+    	}
+    	return gs_acquireAppToken(tenantIdValue, clientIdValue, clientSecretValue, "https://graph.microsoft.com/.default");
+    };
+    
+    var gs_normalizeSitePath = function(sitePathValue) {
+    	var rawPath = gs_require("sitePath", sitePathValue).trim();
+    	if (rawPath.length === 0) {
+    		throw new java.lang.IllegalArgumentException("sitePath cannot be empty");
+    	}
+    	if (rawPath.charAt(0) !== "/") {
+    		rawPath = "/" + rawPath;
+    	}
+    	if (rawPath.length > 1 && rawPath.charAt(rawPath.length - 1) === "/") {
+    		rawPath = rawPath.substring(0, rawPath.length - 1);
+    	}
+    	return rawPath;
+    };
+    
+    var gs_encodeSitePath = function(sitePathValue) {
+    	if (sitePathValue === "/") {
+    		return "/";
+    	}
+    	var parts = String(sitePathValue).split("/");
+    	var encodedParts = [];
+    	var i;
+    	for (i = 0; i < parts.length; i++) {
+    		if (parts[i].length > 0) {
+    			encodedParts.push(String(gs_urlEncode(parts[i])).replace(/\+/g, "%20"));
+    		}
+    	}
+    	return "/" + encodedParts.join("/");
+    };
+    
+    var graphOperation = "resolve_site";
+    var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All";
+    var tokenMode = "delegated_or_application";
+    response = null;
+    
+    try {
+    	var hostnameValue = gs_require("siteHostname", siteHostname).toLowerCase();
+    	var sitePathValue = gs_normalizeSitePath(sitePath);
+    	
+    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    	tokenMode = tokenInfo.mode;
+    	
+    	var endpoint =
+    		"https://graph.microsoft.com/v1.0/sites/" +
+    		hostnameValue +
+    		":" +
+    		gs_encodeSitePath(sitePathValue) +
+    		"?$select=id,name,displayName,webUrl,siteCollection,sharepointIds";
+    	
+    	var siteResponse = gs_graphGetJson(endpoint, tokenInfo.token);
+    	var siteCollectionData = siteResponse.siteCollection === undefined || siteResponse.siteCollection === null ? {} : siteResponse.siteCollection;
+    	var sharepointIdsData = siteResponse.sharepointIds === undefined || siteResponse.sharepointIds === null ? {} : siteResponse.sharepointIds;
+    	
+    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    		siteId: gs_safeString(siteResponse.id),
+    		name: gs_safeString(siteResponse.name),
+    		displayName: gs_safeString(siteResponse.displayName),
+    		webUrl: gs_safeString(siteResponse.webUrl),
+    		siteHostname: hostnameValue,
+    		sitePath: sitePathValue,
+    		siteCollection: siteCollectionData,
+    		sharepointIds: sharepointIdsData,
+    		tokenPreview: tokenInfo.token.length > 20 ? tokenInfo.token.substring(0, 20) + "..." : tokenInfo.token
+    	});
+    } catch (e) {
+    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    }'
+↓response [steps.JsonToXmlStep-1772620203395]: 
+  comment: Converts the JS response object into XML output.
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: response
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: response
+↓siteHostname [variables.RequestableVariable-1772620203462]: 
+  comment: SharePoint Online hostname for target site, for example contoso.sharepoint.com.
+  description: SharePoint Online hostname
+  required: true
+↓sitePath [variables.RequestableVariable-1772620203534]: 
+  comment: Site path under hostname, for example /sites/engineering.
+  description: SharePoint site path
+  required: true
+  value: /sites/convertigo
+↓accessToken [variables.RequestableVariable-1772620203612]: 
+  comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+  description: Delegated Microsoft Graph access token
+↓tenantId [variables.RequestableVariable-1772620203700]: 
+  comment: Azure Entra tenant id used for app-only token acquisition.
+  description: Tenant id for app-only token
+  value: ${Microsoft_AzGraph.tenantId}
+↓clientId [variables.RequestableVariable-1772620203795]: 
+  comment: Azure Entra application client id used for app-only token acquisition.
+  description: Client id for app-only token
+  value: ${Microsoft_AzGraph.clientId}
+↓clientSecret [variables.RequestableVariable-1772620203907]: 
+  comment: Azure Entra application client secret used for app-only token acquisition.
+  description: Client secret for app-only token
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+  visibility: '-1'
+↓TC_ResolveSite [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772620205587]: 
+    value: convertigo.sharepoint.com
+  ↓sitePath [variables.TestCaseVariable-1772620205652]: 
+    value: /sites/test1
