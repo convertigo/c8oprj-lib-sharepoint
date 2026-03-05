@@ -6,7 +6,7 @@
 SharePoint Online connector for Convertigo.
 Uses Microsoft Graph to resolve sites, lists and drives, then perform read/write/share operations on SharePoint Online content.
 
-	[![Build, Deploy and Tests](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml/badge.svg?branch=8.0.0.0)](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml)
+[![Build, Deploy and Tests](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml/badge.svg?branch=8.0.0.0)](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml)
 
 For more technical informations : [documentation](./project.md)
 
@@ -1513,5 +1513,4 @@ Uploads one SharePoint Online drive file using Graph upload session and chunk tr
 <td>tenantId</td><td>Azure Entra tenant id used for app-only token acquisition.</td>
 </tr>
 </table>
-
 
