@@ -186,6 +186,7 @@ ${lineBreak}
 <#assign intro>
 	<@header toc=toc anchors=anchors heading="#" text=project.label />
 	<@comment text=project.comment />
+	[![Build, Deploy and Tests](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml/badge.svg?branch=8.0.0.0)](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml)
 	<#-- you can add your text or own macro call here to add something -->
 	<#--
 	This is text i want to add after the project comment
@@ -236,6 +237,24 @@ curl 'http://localhost:18080/convertigo/projects/lib_Sharepoint/.json' \
   -b 'JSESSIONID=<session-id>' \
   --data-raw '__sequence=ListGetItems&__testcase=TC_ListGetItems'
 ```
+
+	<@header toc=toc anchors=anchors heading="##" text="Logical Test Plan Script" />
+The project provides a full scenario runner that chains all SharePoint sequences and writes a JSON report.
+
+Minimal usage:
+```bash
+python3 ./scripts/run_testcases.py
+```
+
+Useful overrides:
+- `C8O_BASE_URL` to target another Convertigo endpoint.
+- `C8O_PROJECT` to target another project name.
+- `SITE_HOSTNAME`, `SITE_PATH`, `LIST_NAME`, `DRIVE_NAME` to target another SharePoint site context.
+- `ACCESS_TOKEN` (delegated mode) or `AZ_TENANT_ID` + `AZ_CLIENT_ID` + `AZ_CLIENT_SECRET` (application override).
+- `RUN_BUILD_JAR=false` to skip `BuildGraphFlatJar`.
+- `RUN_SHARE_OPERATIONS=false` to skip share/invite/permission deletion calls.
+- `RUN_DESTRUCTIVE_CLEANUP=false` to skip delete calls.
+- `REPORT_FILE` to change report output path (default `build/logical-test-plan-report.json`).
 
 	<@header toc=toc anchors=anchors heading="##" text="Typical Request Patterns" />
 - Site-first pattern: provide `siteHostname` + `sitePath`, and keep `siteId` empty.

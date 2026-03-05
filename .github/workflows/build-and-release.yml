@@ -1,0 +1,162 @@
+# Template configuration for Convertigo project CI build on GitHub Actions
+# Please consult the GitHub documentation for details about settings
+# https://docs.github.com/en/actions
+#
+# This sample assumes you have declared the following Encrypted Secrets
+# https://docs.github.com/en/actions/reference/encrypted-secrets
+#
+# C8O_SERVEUR_TEST_CONVERTIGO: Convertigo server endpoint
+#   example: https://<myhost>/convertigo
+# C8O_USER_TEST_CONVERTIGO: Convertigo admin user or PROJECTS_CONFIG user
+# C8O_PASSWORD_TEST_CONVERTIGO: password for C8O_USER_TEST_CONVERTIGO
+#
+# Discover all tasks and -Pconvertigo options in your project build.gradle file.
+
+name: Convertigo CI
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '**'
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.SSH_KEY }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Gradle Dependencies
+        uses: actions/cache@v4
+        with:
+            path: |
+               ~/.gradle/caches
+               ~/.gradle/wrapper
+            key: ${{ runner.os }}-gradle-caches-v1-${{ hashFiles('**/*.gradle', '**/gradle/wrapper/gradle-wrapper.properties') }}
+            restore-keys: ${{ runner.os }}-gradle-caches-v1-
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        with:
+            path: |
+              ${{ github.workspace }}/_private/ionic/node_modules
+              ${{ github.workspace }}/_private/ionic/.angular
+              /home/runner/convertigo/nodes
+            key: ${{ runner.os }}-build-node-${{ hashFiles('**/package.json', '**/_private/ionic/version.json') }}
+            restore-keys: ${{ runner.os }}-build-node-
+
+      - name: Convertigo generate application code
+        env:
+          C8O_SERVER: ${{ secrets.C8O_SERVEUR_TEST_CONVERTIGO }}
+        run: |
+          echo "Generate Mobile Builder App" && \
+          sh gradlew --stacktrace --info generateMobileBuilder export -x compileMobileBuilder \
+            -Pconvertigo.load.mobileApplicationEndpoint=$C8O_SERVER
+
+      - name: Build and deploy on every push
+        env:
+          C8O_SERVER: ${{ secrets.C8O_SERVEUR_TEST_CONVERTIGO }}
+          C8O_USER: ${{ secrets.C8O_USER_TEST_CONVERTIGO }}
+          C8O_PASSWORD: ${{ secrets.C8O_PASSWORD_TEST_CONVERTIGO }}
+        run: |
+          echo "Deploying ref ${{ github.ref }} to server $C8O_SERVER"
+          sh gradlew --stacktrace --info car deploy -x generateMobileBuilder \
+            -Pconvertigo.deploy.server=$C8O_SERVER \
+            -Pconvertigo.deploy.user=$C8O_USER \
+            -Pconvertigo.deploy.password=$C8O_PASSWORD
+
+      - name: Save application project
+        uses: actions/upload-artifact@v4
+        with:
+          name: project
+          path: build/*.car
+
+  post_deploy_tests:
+    runs-on: ubuntu-latest
+    needs: build_and_deploy
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.SSH_KEY }}
+
+      - name: Run post-deploy test plan
+        id: run_tests
+        continue-on-error: true
+        env:
+          TEST_SERVER_ENDPOINT: ${{ secrets.C8O_SERVEUR_TEST_CONVERTIGO }}
+          C8O_PROJECT: lib_Microsoft_Sharepoint
+        run: |
+          python3 ./scripts/run_testcases.py
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logical-test-plan-report
+          path: build/logical-test-plan-report.json
+
+      - name: Publish test summary
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          report_path = pathlib.Path("build/logical-test-plan-report.json")
+          if not report_path.exists():
+              content = "## Post-deploy Tests\n\nReport file is missing."
+          else:
+              report = json.loads(report_path.read_text(encoding="utf-8"))
+              summary = report.get("summary", {})
+              content = (
+                  "## Post-deploy Tests\n\n"
+                  "| Metric | Value |\n"
+                  "|---|---:|\n"
+                  f"| Total | {int(summary.get('total', 0))} |\n"
+                  f"| Passed | {int(summary.get('passed', 0))} |\n"
+                  f"| Failed | {int(summary.get('failed', 0))} |\n"
+                  f"| Skipped | {int(summary.get('skipped', 0))} |\n"
+                  f"| Mandatory failed | {int(summary.get('mandatoryFailed', 0))} |\n"
+              )
+          summary_file = pathlib.Path(".github_step_summary.md")
+          summary_file.write_text(content, encoding="utf-8")
+          print(content)
+          PY
+          cat .github_step_summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job if tests failed
+        if: steps.run_tests.outcome == 'failure'
+        run: |
+          echo "Post-deploy tests failed"
+          exit 1
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [build_and_deploy, post_deploy_tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download CAR File
+        uses: actions/download-artifact@v4
+        with:
+          name: project
+
+      - name: Deploy to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: '*.car'
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

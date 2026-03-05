@@ -6,6 +6,7 @@
 SharePoint Online connector for Convertigo.
 Uses Microsoft Graph to resolve sites, lists and drives, then perform read/write/share operations on SharePoint Online content.
 
+	[![Build, Deploy and Tests](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml/badge.svg?branch=8.0.0.0)](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml)
 
 For more technical informations : [documentation](./project.md)
 
@@ -13,6 +14,7 @@ For more technical informations : [documentation](./project.md)
 - [Configuration Symbols](#configuration-symbols)
 - [Authentication Model](#authentication-model)
 - [Endpoint-Only Test Calls](#endpoint-only-test-calls)
+- [Logical Test Plan Script](#logical-test-plan-script)
 - [Typical Request Patterns](#typical-request-patterns)
 - [Required Azure Permissions](#required-azure-permissions)
 - [Permissions by Sequence](#permissions-by-sequence)
@@ -109,6 +111,25 @@ curl 'http://localhost:18080/convertigo/projects/lib_Sharepoint/.json' \
   -b 'JSESSIONID=<session-id>' \
   --data-raw '__sequence=ListGetItems&__testcase=TC_ListGetItems'
 ```
+
+## Logical Test Plan Script
+
+The project provides a full scenario runner that chains all SharePoint sequences and writes a JSON report.
+
+Minimal usage:
+```bash
+python3 ./scripts/run_testcases.py
+```
+
+Useful overrides:
+- `C8O_BASE_URL` to target another Convertigo endpoint.
+- `C8O_PROJECT` to target another project name.
+- `SITE_HOSTNAME`, `SITE_PATH`, `LIST_NAME`, `DRIVE_NAME` to target another SharePoint site context.
+- `ACCESS_TOKEN` (delegated mode) or `AZ_TENANT_ID` + `AZ_CLIENT_ID` + `AZ_CLIENT_SECRET` (application override).
+- `RUN_BUILD_JAR=false` to skip `BuildGraphFlatJar`.
+- `RUN_SHARE_OPERATIONS=false` to skip share/invite/permission deletion calls.
+- `RUN_DESTRUCTIVE_CLEANUP=false` to skip delete calls.
+- `REPORT_FILE` to change report output path (default `build/logical-test-plan-report.json`).
 
 ## Typical Request Patterns
 
