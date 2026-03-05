@@ -44,14 +44,30 @@ def _env_bool(name: str, default: str) -> bool:
     return _env(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _normalize_convertigo_server_url(raw: str) -> str:
+    value = raw.strip().rstrip("/")
+    if value.endswith("/convertigo"):
+        return value[: -len("/convertigo")]
+    return value
+
+
 # Convertigo session/auth context.
+RAW_TEST_SERVER_ENDPOINT = os.getenv("TEST_SERVER_ENDPOINT", "")
+RAW_C8O_SERVER_URL = os.getenv("C8O_SERVER_URL", "")
+RAW_C8O_BASE_URL = os.getenv("C8O_BASE_URL", "")
 TEST_SERVER_ENDPOINT = _env("TEST_SERVER_ENDPOINT", "")
-C8O_SERVER_URL = _env("C8O_SERVER_URL", TEST_SERVER_ENDPOINT or "http://localhost:18080")
+C8O_SERVER_URL = _normalize_convertigo_server_url(
+    _env("C8O_SERVER_URL", TEST_SERVER_ENDPOINT or "http://localhost:18080")
+)
 C8O_PROJECT = _env("C8O_PROJECT", "lib_Microsoft_Sharepoint")
 C8O_BASE_URL = _env(
     "C8O_BASE_URL",
     f"{C8O_SERVER_URL}/convertigo/projects/{C8O_PROJECT}/.json",
 )
+if _env_bool("CI", "false") and RAW_TEST_SERVER_ENDPOINT == "" and RAW_C8O_SERVER_URL == "" and RAW_C8O_BASE_URL == "":
+    raise RuntimeError(
+        "No Convertigo endpoint provided in CI. Set TEST_SERVER_ENDPOINT or C8O_SERVER_URL or C8O_BASE_URL."
+    )
 C8O_TIMEOUT_SEC = int(_env("C8O_TIMEOUT_SEC", "240"))
 C8O_ADMIN_INSTANCE = _env("C8O_ADMIN_INSTANCE", "")
 C8O_XSRF_TOKEN = _env("C8O_XSRF_TOKEN", "")

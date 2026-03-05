@@ -21,6 +21,9 @@ on:
     tags:
       - '**'
 
+env:
+  C8O_SERVER_ENDPOINT: ${{ secrets.C8O_SERVEUR_TEST_CONVERTIGO || secrets.C8O_SERVER_TEST_CONVERTIGO || vars.C8O_SERVEUR_TEST_CONVERTIGO || vars.C8O_SERVER_TEST_CONVERTIGO }}
+
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
@@ -55,9 +58,18 @@ jobs:
             key: ${{ runner.os }}-build-node-${{ hashFiles('**/package.json', '**/_private/ionic/version.json') }}
             restore-keys: ${{ runner.os }}-build-node-
 
+      - name: Validate Convertigo endpoint
+        run: |
+          if [ -z "$C8O_SERVER_ENDPOINT" ]; then
+            echo "::error title=Missing Convertigo endpoint::Set C8O_SERVEUR_TEST_CONVERTIGO (secret/variable)."
+            echo "::error title=Alternative name::C8O_SERVER_TEST_CONVERTIGO is also supported."
+            exit 1
+          fi
+          echo "Using Convertigo endpoint: $C8O_SERVER_ENDPOINT"
+
       - name: Convertigo generate application code
         env:
-          C8O_SERVER: ${{ secrets.C8O_SERVEUR_TEST_CONVERTIGO }}
+          C8O_SERVER: ${{ env.C8O_SERVER_ENDPOINT }}
         run: |
           echo "Generate Mobile Builder App" && \
           sh gradlew --stacktrace --info generateMobileBuilder export -x compileMobileBuilder \
@@ -65,7 +77,7 @@ jobs:
 
       - name: Build and deploy on every push
         env:
-          C8O_SERVER: ${{ secrets.C8O_SERVEUR_TEST_CONVERTIGO }}
+          C8O_SERVER: ${{ env.C8O_SERVER_ENDPOINT }}
           C8O_USER: ${{ secrets.C8O_USER_TEST_CONVERTIGO }}
           C8O_PASSWORD: ${{ secrets.C8O_PASSWORD_TEST_CONVERTIGO }}
         run: |
@@ -90,11 +102,19 @@ jobs:
         with:
           ssh-key: ${{ secrets.SSH_KEY }}
 
+      - name: Validate Convertigo endpoint
+        run: |
+          if [ -z "$C8O_SERVER_ENDPOINT" ]; then
+            echo "::error title=Missing Convertigo endpoint::Set C8O_SERVEUR_TEST_CONVERTIGO (secret/variable)."
+            echo "::error title=Alternative name::C8O_SERVER_TEST_CONVERTIGO is also supported."
+            exit 1
+          fi
+
       - name: Run post-deploy test plan
         id: run_tests
         continue-on-error: true
         env:
-          TEST_SERVER_ENDPOINT: ${{ secrets.C8O_SERVEUR_TEST_CONVERTIGO }}
+          TEST_SERVER_ENDPOINT: ${{ env.C8O_SERVER_ENDPOINT }}
           C8O_PROJECT: lib_Microsoft_Sharepoint
         run: |
           python3 ./scripts/run_testcases.py
