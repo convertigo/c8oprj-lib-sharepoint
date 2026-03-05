@@ -12,9 +12,12 @@ For more technical informations : [documentation](./project.md)
 - [Installation](#installation)
 - [Configuration Symbols](#configuration-symbols)
 - [Authentication Model](#authentication-model)
+- [Endpoint-Only Test Calls](#endpoint-only-test-calls)
+- [Typical Request Patterns](#typical-request-patterns)
 - [Required Azure Permissions](#required-azure-permissions)
 - [Permissions by Sequence](#permissions-by-sequence)
 - [Known Limitations](#known-limitations)
+- [Payload Examples](#payload-examples)
 - [Sequences](#sequences)
     - [BuildGraphFlatJar](#buildgraphflatjar)
     - [CopyDriveItem](#copydriveitem)
@@ -71,6 +74,7 @@ For more technical informations : [documentation](./project.md)
 ## Configuration Symbols
 
 These symbols can be set at project level and reused by all sequences.
+In a standard deployment, they are configured once on the server and not passed on each request.
 
 <table>
 <tr><th>Symbol</th><th>Required</th><th>Secret</th><th>Purpose</th></tr>
@@ -81,10 +85,38 @@ These symbols can be set at project level and reused by all sequences.
 
 ## Authentication Model
 
+- Default mode (recommended for backend use): rely on server-side symbols (`tenantId`, `clientId`, `clientSecret`) and do not pass credentials in calls.
 - Delegated mode: pass `accessToken`; tenant/client/secret are ignored.
-- Application mode: leave `accessToken` empty and provide tenant/client/secret.
+- Application override: leave `accessToken` empty and pass tenant/client/secret explicitly when needed.
 - All online Graph sequences are `Hidden` and `authenticatedContextRequired=true`.
 - Sequence responses expose `tokenMode` (`delegated` or `application`) for diagnostics.
+
+## Endpoint-Only Test Calls
+
+Minimal example with testcase injection:
+```bash
+curl 'http://localhost:18080/convertigo/projects/lib_Sharepoint/.json' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-raw '__sequence=ResolveSite&__testcase=TC_ResolveSite'
+```
+
+Typical authenticated admin call (Convertigo Studio session):
+```bash
+curl 'http://localhost:18080/convertigo/projects/lib_Sharepoint/.json' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -H 'Admin-Instance: <admin-instance-id>' \
+  -H 'x-xsrf-token: <xsrf-token>' \
+  -b 'JSESSIONID=<session-id>' \
+  --data-raw '__sequence=ListGetItems&__testcase=TC_ListGetItems'
+```
+
+## Typical Request Patterns
+
+- Site-first pattern: provide `siteHostname` + `sitePath`, and keep `siteId` empty.
+- ID-first pattern: provide `siteId` / `listId` / `driveId` directly to skip resolver lookups.
+- Drive resolution priority: `driveId` first, then list-based resolution (`listId`/`listName`), then `driveName`.
+- List operations use list item identifiers (`itemId` numeric string), while drive operations use Graph drive item identifiers (opaque string).
+- For large binary uploads, prefer `UploadDriveItemLargeContent`; for smaller payloads, `UploadDriveItemContent` is usually simpler.
 
 ## Required Azure Permissions
 
@@ -137,6 +169,32 @@ Grant Microsoft Graph **Application** permissions, then click `Grant admin conse
 - `Sites.Selected` requires explicit grant on target sites; otherwise all calls return `403`.
 - List item identifiers (usually numeric strings) and drive item identifiers (Graph opaque ids) are different and not interchangeable.
 - `CopyDriveItem` returns an asynchronous monitor URL; completion must be polled by client code.
+
+## Payload Examples
+
+`fieldsJson` example for `CreateListItem` / `UpdateListItem`:
+```json
+{
+  "Title": "Updated from Convertigo",
+  "CustomText": "Hello from API"
+}
+```
+
+`updateJson` example for `UpdateDriveItem`:
+```json
+{
+  "name": "Renamed_document.docx",
+  "description": "Updated by Convertigo sequence"
+}
+```
+
+`recipientsJson` example for `InviteDriveItemRecipients`:
+```json
+[
+  { "email": "user1@contoso.com" },
+  { "email": "user2@contoso.com", "alias": "User Two" }
+]
+```
 ## Sequences
 
 ### BuildGraphFlatJar
