@@ -200,7 +200,7 @@ comment: Uploads one SharePoint Online drive file content through Microsoft Grap
     
     var gs_decodeBase64 = function(name, rawValue) {
     	var source = gs_require(name, rawValue);
-    	var compact = String(source).replaceAll("\\s", "");
+    	var compact = String(source).replace(/\s/g, "");
     	try {
     		return java.util.Base64.getDecoder().decode(compact);
     	} catch (decodeError) {

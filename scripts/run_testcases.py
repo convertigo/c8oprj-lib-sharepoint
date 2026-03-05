@@ -116,7 +116,6 @@ EXISTING_PERMISSION_ID = _env("EXISTING_PERMISSION_ID", "")
 FALLBACK_PERMISSION_ID = _env("FALLBACK_PERMISSION_ID", "dGVzdDEgVmlzaXRvcnM")
 INVITE_RECIPIENT_EMAILS = _env("INVITE_RECIPIENT_EMAILS", "test1@convertigo.onmicrosoft.com")
 
-RUN_BUILD_JAR = _env_bool("RUN_BUILD_JAR", "true")
 RUN_SHARE_OPERATIONS = _env_bool("RUN_SHARE_OPERATIONS", "true")
 RUN_DESTRUCTIVE_CLEANUP = _env_bool("RUN_DESTRUCTIVE_CLEANUP", "true")
 REPORT_FILE = _env("REPORT_FILE", "build/logical-test-plan-report.json")
@@ -561,17 +560,6 @@ def main() -> int:
         ctx["invited_permission_id"] = _extract_permission_id_from_data(response_data(payload))
 
     # Phase 1: Bootstrap and resolvers.
-    plan.run_step(
-        "phase-1-bootstrap",
-        "BuildGraphFlatJar",
-        "BuildGraphFlatJar",
-        {},
-        mandatory=False,
-        enabled=RUN_BUILD_JAR,
-        validator=lambda payload: isinstance(payload.get("process"), dict)
-        and str(payload["process"].get("exit", "")) == "0"
-        and str(payload["process"].get("error", "") or "") == "",
-    )
     plan.run_step(
         "phase-1-bootstrap",
         "GetGraphAccessToken",

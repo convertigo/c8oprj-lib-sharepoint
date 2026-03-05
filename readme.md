@@ -126,7 +126,6 @@ Useful overrides:
 - `C8O_PROJECT` to target another project name.
 - `SITE_HOSTNAME`, `SITE_PATH`, `LIST_NAME`, `DRIVE_NAME` to target another SharePoint site context.
 - `ACCESS_TOKEN` (delegated mode) or `AZ_TENANT_ID` + `AZ_CLIENT_ID` + `AZ_CLIENT_SECRET` (application override).
-- `RUN_BUILD_JAR=false` to skip `BuildGraphFlatJar`.
 - `RUN_SHARE_OPERATIONS=false` to skip share/invite/permission deletion calls.
 - `RUN_DESTRUCTIVE_CLEANUP=false` to skip delete calls.
 - `REPORT_FILE` to change report output path (default `build/logical-test-plan-report.json`).
