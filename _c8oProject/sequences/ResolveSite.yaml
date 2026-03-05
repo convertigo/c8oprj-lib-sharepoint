@@ -1,12 +1,14 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Resolves a SharePoint Online site by hostname and site path using Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+comment: Resolves a SharePoint site by hostname and path using Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 ↓inputVars [steps.InputVariablesStep-1772620203268]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
 ↓ExecuteResolveSite [steps.SimpleStep-1772620203332]: 
-  comment: Calls Microsoft Graph sites endpoint to resolve site id and metadata.
+  comment: Routes to Microsoft Graph (online) or SharePoint REST (on-prem) to resolve site id and metadata.
   expression: |
-    'var gs_isBlank = function(value) {
+    'include("js/sharepoint_provider.js");
+    
+    var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
     };
     
@@ -205,38 +207,58 @@ comment: Resolves a SharePoint Online site by hostname and site path using Micro
     var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
+    var requestedProvider = sppr_normalizeProvider(provider, "graph");
     
-    try {
-    	var hostnameValue = gs_require("siteHostname", siteHostname).toLowerCase();
-    	var sitePathValue = gs_normalizeSitePath(sitePath);
+    if (requestedProvider === "onprem") {
+    	tokenMode = "onprem";
+    	try {
+    		sppr_ensureOnPremDispatch();
+    		response = sppr_onPremResolveSite({
+    			siteBaseUrl: siteBaseUrl,
+    			siteHostname: siteHostname,
+    			sitePath: sitePath,
+    			onPremProtocol: onPremProtocol,
+    			accessToken: accessToken,
+    			onPremUsername: onPremUsername,
+    			onPremPassword: onPremPassword,
+    			cookieHeader: cookieHeader
+    		});
+    	} catch (onPremError) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, onPremError);
+    	}
+    } else {
+    	try {
+    		var hostnameValue = gs_require("siteHostname", siteHostname).toLowerCase();
+    		var sitePathValue = gs_normalizeSitePath(sitePath);
     	
-    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
-    	tokenMode = tokenInfo.mode;
+    		var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    		tokenMode = tokenInfo.mode;
     	
-    	var endpoint =
-    		"https://graph.microsoft.com/v1.0/sites/" +
-    		hostnameValue +
-    		":" +
-    		gs_encodeSitePath(sitePathValue) +
-    		"?$select=id,name,displayName,webUrl,siteCollection,sharepointIds";
+    		var endpoint =
+    			"https://graph.microsoft.com/v1.0/sites/" +
+    			hostnameValue +
+    			":" +
+    			gs_encodeSitePath(sitePathValue) +
+    			"?$select=id,name,displayName,webUrl,siteCollection,sharepointIds";
     	
-    	var siteResponse = gs_graphGetJson(endpoint, tokenInfo.token);
-    	var siteCollectionData = siteResponse.siteCollection === undefined || siteResponse.siteCollection === null ? {} : siteResponse.siteCollection;
-    	var sharepointIdsData = siteResponse.sharepointIds === undefined || siteResponse.sharepointIds === null ? {} : siteResponse.sharepointIds;
+    		var siteResponse = gs_graphGetJson(endpoint, tokenInfo.token);
+    		var siteCollectionData = siteResponse.siteCollection === undefined || siteResponse.siteCollection === null ? {} : siteResponse.siteCollection;
+    		var sharepointIdsData = siteResponse.sharepointIds === undefined || siteResponse.sharepointIds === null ? {} : siteResponse.sharepointIds;
     	
-    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
-    		siteId: gs_safeString(siteResponse.id),
-    		name: gs_safeString(siteResponse.name),
-    		displayName: gs_safeString(siteResponse.displayName),
-    		webUrl: gs_safeString(siteResponse.webUrl),
-    		siteHostname: hostnameValue,
-    		sitePath: sitePathValue,
-    		siteCollection: siteCollectionData,
-    		sharepointIds: sharepointIdsData,
-    		tokenPreview: tokenInfo.token.length > 20 ? tokenInfo.token.substring(0, 20) + "..." : tokenInfo.token
-    	});
-    } catch (e) {
-    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    		response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    			siteId: gs_safeString(siteResponse.id),
+    			name: gs_safeString(siteResponse.name),
+    			displayName: gs_safeString(siteResponse.displayName),
+    			webUrl: gs_safeString(siteResponse.webUrl),
+    			siteHostname: hostnameValue,
+    			sitePath: sitePathValue,
+    			siteCollection: siteCollectionData,
+    			sharepointIds: sharepointIdsData,
+    			tokenPreview: tokenInfo.token.length > 20 ? tokenInfo.token.substring(0, 20) + "..." : tokenInfo.token
+    		});
+    	} catch (e) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    	}
     }'
 ↓response [steps.JsonToXmlStep-1772620203395]: 
   comment: Converts the JS response object into XML output.
@@ -253,8 +275,8 @@ comment: Resolves a SharePoint Online site by hostname and site path using Micro
         - ↑mode: PLAIN
         - →→: response
 ↓siteHostname [variables.RequestableVariable-1772620203462]: 
-  comment: SharePoint Online hostname for target site, for example contoso.sharepoint.com.
-  description: SharePoint Online hostname
+  comment: SharePoint hostname for target site, for example contoso.sharepoint.com.
+  description: SharePoint hostname
   required: true
 ↓sitePath [variables.RequestableVariable-1772620203534]: 
   comment: Site path under hostname, for example /sites/engineering.
@@ -279,6 +301,38 @@ comment: Resolves a SharePoint Online site by hostname and site path using Micro
     - ↑ciphered: true
     - ↑traceable: false
     - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+  visibility: '-1'
+↓provider [variables.RequestableVariable-1772714808905]: 
+  comment: Backend provider selection graph or onprem.
+  description: Provider selection graph or onprem
+  value: ${lib_Microsoft_Sharepoint.provider}
+↓siteBaseUrl [variables.RequestableVariable-1772714809119]: 
+  comment: Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+  description: On-prem site base URL
+  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}
+↓onPremProtocol [variables.RequestableVariable-1772714809180]: 
+  comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+  description: On-prem protocol fallback
+  value: https
+↓onPremUsername [variables.RequestableVariable-1772714809240]: 
+  comment: Optional technical username for on-prem basic authentication.
+  description: On-prem technical username
+  value: ${lib_Microsoft_Sharepoint.onPrem.username}
+↓onPremPassword [variables.RequestableVariable-1772714809313]: 
+  comment: Optional technical password for on-prem basic authentication.
+  description: On-prem technical password
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb405245a4fafc73fbab6b6999c294cb356940c0e6fa2827adf0d777f2f4f3e526ac991
+  visibility: '-1'
+↓cookieHeader [variables.RequestableVariable-1772714809382]: 
+  comment: Optional Cookie header for on-prem forms authentication.
+  description: Optional on-prem Cookie header
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb40524d13591840f063c4918706e203c3286f7945be3bd1a0c33cb44b7f24f9d492d4c
   visibility: '-1'
 ↓TC_ResolveSite [core.TestCase]: 
   ↓siteHostname [variables.TestCaseVariable-1772620205587]: 

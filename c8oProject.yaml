@@ -1,34 +1,46 @@
 ↑convertigo: 8.0.0.m006
 ↓lib_Microsoft_Sharepoint [core.Project]: 
   comment: |
-    SharePoint Online connector for Convertigo.
-    Uses Microsoft Graph to resolve sites, lists and drives, then perform read/write/share operations on SharePoint Online content.
+    SharePoint connector for Convertigo (Online + On-Prem).
+    Online mode uses Microsoft Graph for site/list/drive operations.
+    On-prem mode exposes SharePoint REST APIs for site/list/file operations with digest-based writes.
   contextTimeout: 59
   corsOrigin: =Origin
   httpSessionTimeout: 60
-  version: 8.0.0.0
+  version: 8.0.0.1
+  ↓sharepointOnPremHttp [connectors.HttpConnector]: 🗏 connectors/sharepointOnPremHttp.yaml
   ↓void [connectors.SqlConnector]: 🗏 connectors/void.yaml
   ↓BuildGraphFlatJar [sequences.GenericSequence]: 🗏 sequences/BuildGraphFlatJar.yaml
-  ↓CopyDriveItem [sequences.GenericSequence]: 🗏 sequences/CopyDriveItem.yaml
-  ↓CreateDriveFolder [sequences.GenericSequence]: 🗏 sequences/CreateDriveFolder.yaml
-  ↓CreateDriveItemShareLink [sequences.GenericSequence]: 🗏 sequences/CreateDriveItemShareLink.yaml
+  ↓CopyItem [sequences.GenericSequence]: 🗏 sequences/CopyItem.yaml
+  ↓CreateFolder [sequences.GenericSequence]: 🗏 sequences/CreateFolder.yaml
+  ↓CreateGraphSubscription [sequences.GenericSequence]: 🗏 sequences/CreateGraphSubscription.yaml
   ↓CreateListItem [sequences.GenericSequence]: 🗏 sequences/CreateListItem.yaml
-  ↓DeleteDriveItem [sequences.GenericSequence]: 🗏 sequences/DeleteDriveItem.yaml
-  ↓DeleteDriveItemPermission [sequences.GenericSequence]: 🗏 sequences/DeleteDriveItemPermission.yaml
+  ↓CreateShareLink [sequences.GenericSequence]: 🗏 sequences/CreateShareLink.yaml
+  ↓DeleteGraphSubscription [sequences.GenericSequence]: 🗏 sequences/DeleteGraphSubscription.yaml
+  ↓DeleteItem [sequences.GenericSequence]: 🗏 sequences/DeleteItem.yaml
+  ↓DeleteItemPermission [sequences.GenericSequence]: 🗏 sequences/DeleteItemPermission.yaml
   ↓DeleteListItem [sequences.GenericSequence]: 🗏 sequences/DeleteListItem.yaml
-  ↓DownloadDriveItemContent [sequences.GenericSequence]: 🗏 sequences/DownloadDriveItemContent.yaml
-  ↓GetDriveItem [sequences.GenericSequence]: 🗏 sequences/GetDriveItem.yaml
+  ↓DownloadItemContent [sequences.GenericSequence]: 🗏 sequences/DownloadItemContent.yaml
+  ↓ExecuteGraphBatch [sequences.GenericSequence]: 🗏 sequences/ExecuteGraphBatch.yaml
+  ↓GetCopyItemOperation [sequences.GenericSequence]: 🗏 sequences/GetCopyItemOperation.yaml
   ↓GetGraphAccessToken [sequences.GenericSequence]: 🗏 sequences/GetGraphAccessToken.yaml
+  ↓GetItem [sequences.GenericSequence]: 🗏 sequences/GetItem.yaml
   ↓GetListItem [sequences.GenericSequence]: 🗏 sequences/GetListItem.yaml
-  ↓InviteDriveItemRecipients [sequences.GenericSequence]: 🗏 sequences/InviteDriveItemRecipients.yaml
-  ↓ListDriveItemPermissions [sequences.GenericSequence]: 🗏 sequences/ListDriveItemPermissions.yaml
-  ↓ListDriveItems [sequences.GenericSequence]: 🗏 sequences/ListDriveItems.yaml
+  ↓InviteItemRecipients [sequences.GenericSequence]: 🗏 sequences/InviteItemRecipients.yaml
   ↓ListGetItems [sequences.GenericSequence]: 🗏 sequences/ListGetItems.yaml
-  ↓MoveDriveItem [sequences.GenericSequence]: 🗏 sequences/MoveDriveItem.yaml
-  ↓ResolveDrive [sequences.GenericSequence]: 🗏 sequences/ResolveDrive.yaml
+  ↓ListGetItemsDelta [sequences.GenericSequence]: 🗏 sequences/ListGetItemsDelta.yaml
+  ↓ListItemPermissions [sequences.GenericSequence]: 🗏 sequences/ListItemPermissions.yaml
+  ↓ListItems [sequences.GenericSequence]: 🗏 sequences/ListItems.yaml
+  ↓ListItemsDelta [sequences.GenericSequence]: 🗏 sequences/ListItemsDelta.yaml
+  ↓ListItemVersions [sequences.GenericSequence]: 🗏 sequences/ListItemVersions.yaml
+  ↓ListSiteDrives [sequences.GenericSequence]: 🗏 sequences/ListSiteDrives.yaml
+  ↓ListSiteLists [sequences.GenericSequence]: 🗏 sequences/ListSiteLists.yaml
+  ↓MoveItem [sequences.GenericSequence]: 🗏 sequences/MoveItem.yaml
+  ↓ResolveLibrary [sequences.GenericSequence]: 🗏 sequences/ResolveLibrary.yaml
   ↓ResolveList [sequences.GenericSequence]: 🗏 sequences/ResolveList.yaml
   ↓ResolveSite [sequences.GenericSequence]: 🗏 sequences/ResolveSite.yaml
-  ↓UpdateDriveItem [sequences.GenericSequence]: 🗏 sequences/UpdateDriveItem.yaml
+  ↓RestoreItemVersion [sequences.GenericSequence]: 🗏 sequences/RestoreItemVersion.yaml
+  ↓UpdateItem [sequences.GenericSequence]: 🗏 sequences/UpdateItem.yaml
   ↓UpdateListItem [sequences.GenericSequence]: 🗏 sequences/UpdateListItem.yaml
-  ↓UploadDriveItemContent [sequences.GenericSequence]: 🗏 sequences/UploadDriveItemContent.yaml
-  ↓UploadDriveItemLargeContent [sequences.GenericSequence]: 🗏 sequences/UploadDriveItemLargeContent.yaml
+  ↓UploadItemContent [sequences.GenericSequence]: 🗏 sequences/UploadItemContent.yaml
+  ↓UploadItemLargeContent [sequences.GenericSequence]: 🗏 sequences/UploadItemLargeContent.yaml

@@ -1,12 +1,14 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Creates one SharePoint Online drive item sharing link through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
-↓inputVars [steps.InputVariablesStep-1772639411619]: 
+comment: Invites recipients to one SharePoint drive item through Microsoft Graph (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+↓inputVars [steps.InputVariablesStep-1772719766502]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
-↓ExecuteCreateDriveItemShareLink [steps.SimpleStep-1772639411658]: 
-  comment: Resolves site and drive then creates one sharing link for a drive item.
+↓ExecuteInviteDriveItemRecipients [steps.SimpleStep-1772719766528]: 
+  comment: Resolves site and drive then invites recipients on one drive item..
   expression: |
-    'var gs_isBlank = function(value) {
+    'include("js/sharepoint_provider.js");
+    
+    var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
     };
     
@@ -474,112 +476,219 @@ comment: Creates one SharePoint Online drive item sharing link through Microsoft
     	return gs_require("rootItemId", rootObject.id);
     };
     
-    var graphOperation = "create_drive_item_share_link";
+    var graphOperation = "invite_drive_item_recipients";
     var requiredPermission = "Files.ReadWrite.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
+    var requestedProvider = sppr_normalizeProvider(provider, "graph");
     
-    try {
-    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
-    	tokenMode = tokenInfo.mode;
-    
-    	var targetItemId = gs_require("itemId", itemId);
-    	if (String(targetItemId).toLowerCase() === "root") {
-    		throw new java.lang.IllegalArgumentException("Creating share link on drive root is not allowed. Provide a child item id.");
-    	}
-    
-    	var requestedLinkType = gs_defaultString(linkType, "view").toLowerCase();
-    	var requestedScope = gs_defaultString(scope, "organization").toLowerCase();
-    	var requestedPassword = gs_safeString(password);
-    	var requestedExpiration = gs_safeString(expirationDateTime);
-    	var requestedRetainInherited = gs_toBoolean(retainInheritedPermissions, true);
-    	var includeRaw = gs_toBoolean(includeRawPermission, false);
-    
-    	if (requestedLinkType !== "view" && requestedLinkType !== "edit" && requestedLinkType !== "embed" && requestedLinkType !== "blocksDownload") {
-    		throw new java.lang.IllegalArgumentException("linkType must be one of: view, edit, embed, blocksDownload");
-    	}
-    	if (requestedScope !== "anonymous" && requestedScope !== "organization" && requestedScope !== "users") {
-    		throw new java.lang.IllegalArgumentException("scope must be one of: anonymous, organization, users");
-    	}
-    
-    	var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
-    	var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
-    	var resolvedDrive = resolvedDriveData.drive;
-    	var resolvedList = resolvedDriveData.list;
-    
-    	var createLinkObject = {
-    		type: requestedLinkType,
-    		scope: requestedScope,
-    		retainInheritedPermissions: requestedRetainInherited
-    	};
-    	if (!gs_isBlank(requestedPassword)) {
-    		createLinkObject.password = requestedPassword;
-    	}
-    	if (!gs_isBlank(requestedExpiration)) {
-    		createLinkObject.expirationDateTime = requestedExpiration;
-    	}
-    
-    	var createLinkUrl =
-    		"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
-    		"/items/" + gs_encodePathSegment(targetItemId) + "/createLink";
-    
-    	var createLinkResponse = gs_httpRequest("POST", createLinkUrl, tokenInfo.token, JSON.stringify(createLinkObject), "application/json", "application/json", null);
-    	if (createLinkResponse.statusCode < 200 || createLinkResponse.statusCode >= 300) {
-    		throw new java.lang.RuntimeException("Graph createLink failed (" + createLinkResponse.statusCode + "): " + createLinkResponse.body);
-    	}
-    	if (gs_isBlank(createLinkResponse.body)) {
-    		throw new java.lang.RuntimeException("Graph createLink returned empty body");
-    	}
-    	var permissionObject = JSON.parse(createLinkResponse.body);
-    	var responsePermission = {
-    		permissionId: gs_safeString(permissionObject.id),
-    		shareId: gs_safeString(permissionObject.shareId),
-    		roles: permissionObject.roles instanceof Array ? permissionObject.roles : [],
-    		expirationDateTime: gs_safeString(permissionObject.expirationDateTime),
-    		hasPassword: !gs_isBlank(permissionObject.hasPassword) ? String(permissionObject.hasPassword) : "",
-    		link: permissionObject.link === undefined || permissionObject.link === null ? {} : permissionObject.link,
-    		inheritedFrom: permissionObject.inheritedFrom === undefined || permissionObject.inheritedFrom === null ? {} : permissionObject.inheritedFrom,
-    		grantedToV2: permissionObject.grantedToV2 === undefined || permissionObject.grantedToV2 === null ? {} : permissionObject.grantedToV2,
-    		grantedToIdentitiesV2: permissionObject.grantedToIdentitiesV2 === undefined || permissionObject.grantedToIdentitiesV2 === null ? [] : permissionObject.grantedToIdentitiesV2,
-    		application: permissionObject.application === undefined || permissionObject.application === null ? {} : permissionObject.application
-    	};
-    	if (includeRaw) {
-    		responsePermission.raw = permissionObject;
-    	}
-    
+    if (requestedProvider === "onprem") {
+    	tokenMode = "onprem";
     	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
-    		siteId: resolvedSite.siteId,
-    		siteHostname: resolvedSite.siteHostname,
-    		sitePath: resolvedSite.sitePath,
-    		driveId: resolvedDrive.driveId,
-    		driveName: resolvedDrive.driveName,
-    		driveWebUrl: resolvedDrive.driveWebUrl,
-    		driveType: resolvedDrive.driveType,
-    		sharepointIds: resolvedDrive.sharepointIds,
-    		quota: resolvedDrive.quota,
-    		owner: resolvedDrive.owner,
-    		resolvedFromList: resolvedList !== null,
-    		listId: resolvedList === null ? "" : resolvedList.listId,
-    		listName: resolvedList === null ? "" : resolvedList.listName,
-    		listDisplayName: resolvedList === null ? "" : resolvedList.listDisplayName,
-    		listWebUrl: resolvedList === null ? "" : resolvedList.listWebUrl,
-    		listInfo: resolvedList === null ? {} : resolvedList.listInfo,
-    		listSharepointIds: resolvedList === null ? {} : resolvedList.sharepointIds,
+    		supported: false,
+    		fallbackStatus: "onprem_not_supported",
+    		message: "Inviting drive item recipients is not supported for SharePoint on-prem in unified mode. Use provider=graph.",
     		query: {
-    			itemId: targetItemId,
-    			linkType: requestedLinkType,
-    			scope: requestedScope,
-    			passwordProvided: !gs_isBlank(requestedPassword),
-    			expirationDateTimeProvided: !gs_isBlank(requestedExpiration),
-    			retainInheritedPermissions: requestedRetainInherited,
-    			includeRawPermission: includeRaw
+    			itemId: gs_safeString(itemId),
+    			recipientEmails: gs_splitCsv(recipientEmails),
+    			recipientsCount: gs_splitCsv(recipientEmails).length,
+    			roles: gs_splitCsv(rolesCsv),
+    			messageProvided: !gs_isBlank(message),
+    			requireSignIn: gs_toBoolean(requireSignIn, true),
+    			sendInvitation: gs_toBoolean(sendInvitation, true),
+    			expirationDateTimeProvided: !gs_isBlank(expirationDateTime),
+    			retainInheritedPermissions: gs_toBoolean(retainInheritedPermissions, true),
+    			includeRawPermission: gs_toBoolean(includeRawPermission, false)
     		},
-    		permission: responsePermission
+    		inviteResponse: {
+    			statusCode: 0,
+    			hasValueArray: false
+    		},
+    		permissions: []
     	});
-    } catch (e) {
-    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    } else {
+    	try {
+    		var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    		tokenMode = tokenInfo.mode;
+    
+    		var targetItemId = gs_require("itemId", itemId);
+    		if (String(targetItemId).toLowerCase() === "root") {
+    			throw new java.lang.IllegalArgumentException("Inviting recipients on drive root is not allowed. Provide a child item id.");
+    		}
+    
+    		var requestedRecipientEmails = gs_safeString(recipientEmails);
+    		var requestedRecipientsJson = gs_safeString(recipientsJson);
+    		var requestedRoles = gs_splitCsv(rolesCsv);
+    		var requestedMessage = gs_safeString(message);
+    		var requestedRequireSignIn = gs_toBoolean(requireSignIn, true);
+    		var requestedSendInvitation = gs_toBoolean(sendInvitation, true);
+    		var requestedExpiration = gs_safeString(expirationDateTime);
+    		var requestedRetainInherited = gs_toBoolean(retainInheritedPermissions, true);
+    		var includeRaw = gs_toBoolean(includeRawPermission, false);
+    
+    		if (requestedRoles.length === 0) {
+    			requestedRoles = ["read"];
+    		}
+    
+    		var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
+    		var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
+    		var resolvedDrive = resolvedDriveData.drive;
+    		var resolvedList = resolvedDriveData.list;
+    
+    		var recipients = [];
+    		if (!gs_isBlank(requestedRecipientsJson)) {
+    			var parsedRecipients = null;
+    			try {
+    				parsedRecipients = JSON.parse(requestedRecipientsJson);
+    			} catch (parseRecipientsError) {
+    				throw new java.lang.IllegalArgumentException("Invalid JSON for recipientsJson: " + gs_safeString(parseRecipientsError.message));
+    			}
+    			if (!(parsedRecipients instanceof Array)) {
+    				throw new java.lang.IllegalArgumentException("recipientsJson must be a JSON array");
+    			}
+    			var r;
+    			for (r = 0; r < parsedRecipients.length; r++) {
+    				var recipientEntry = parsedRecipients[r];
+    				if (recipientEntry === null || recipientEntry === undefined) {
+    					continue;
+    				}
+    				if (typeof recipientEntry === "string") {
+    					var recipientEmailFromString = String(recipientEntry).trim();
+    					if (recipientEmailFromString.length > 0) {
+    						recipients.push({ email: recipientEmailFromString });
+    					}
+    				} else {
+    					var recipientEmail = gs_safeString(recipientEntry.email).trim();
+    					if (recipientEmail.length === 0) {
+    						recipientEmail = gs_safeString(recipientEntry.alias).trim();
+    					}
+    					if (recipientEmail.length > 0) {
+    						recipients.push({ email: recipientEmail });
+    					}
+    				}
+    			}
+    		}
+    
+    		var csvRecipients = gs_splitCsv(requestedRecipientEmails);
+    		var c;
+    		for (c = 0; c < csvRecipients.length; c++) {
+    			recipients.push({ email: String(csvRecipients[c]) });
+    		}
+    
+    		if (recipients.length === 0) {
+    			throw new java.lang.IllegalArgumentException("Provide recipientEmails and/or recipientsJson with at least one recipient");
+    		}
+    
+    		var normalizedRoles = [];
+    		var k;
+    		for (k = 0; k < requestedRoles.length; k++) {
+    			var roleValue = String(requestedRoles[k]).trim().toLowerCase();
+    			if (roleValue.length > 0) {
+    				normalizedRoles.push(roleValue);
+    			}
+    		}
+    		if (normalizedRoles.length === 0) {
+    			normalizedRoles.push("read");
+    		}
+    
+    		var inviteObject = {
+    			recipients: recipients,
+    			roles: normalizedRoles,
+    			requireSignIn: requestedRequireSignIn,
+    			sendInvitation: requestedSendInvitation,
+    			retainInheritedPermissions: requestedRetainInherited
+    		};
+    
+    		if (!gs_isBlank(requestedMessage)) {
+    			inviteObject.message = requestedMessage;
+    		}
+    		if (!gs_isBlank(requestedExpiration)) {
+    			inviteObject.expirationDateTime = requestedExpiration;
+    		}
+    
+    		var inviteUrl =
+    			"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
+    			"/items/" + gs_encodePathSegment(targetItemId) + "/invite";
+    
+    		var inviteResponse = gs_httpRequest("POST", inviteUrl, tokenInfo.token, JSON.stringify(inviteObject), "application/json", "application/json", null);
+    		if (inviteResponse.statusCode < 200 || inviteResponse.statusCode >= 300) {
+    			throw new java.lang.RuntimeException("Graph invite failed (" + inviteResponse.statusCode + "): " + inviteResponse.body);
+    		}
+    		if (gs_isBlank(inviteResponse.body)) {
+    			throw new java.lang.RuntimeException("Graph invite returned empty body");
+    		}
+    		var inviteBody = JSON.parse(inviteResponse.body);
+    		var permissionCandidates = [];
+    		if (inviteBody.value instanceof Array) {
+    			permissionCandidates = inviteBody.value;
+    		} else if (inviteBody.id !== undefined && inviteBody.id !== null) {
+    			permissionCandidates = [inviteBody];
+    		}
+    
+    		var responsePermissions = [];
+    		var p;
+    		for (p = 0; p < permissionCandidates.length; p++) {
+    			var permissionObject = permissionCandidates[p];
+    			var mappedPermission = {
+    				permissionId: gs_safeString(permissionObject.id),
+    				shareId: gs_safeString(permissionObject.shareId),
+    				roles: permissionObject.roles instanceof Array ? permissionObject.roles : [],
+    				expirationDateTime: gs_safeString(permissionObject.expirationDateTime),
+    				hasPassword: !gs_isBlank(permissionObject.hasPassword) ? String(permissionObject.hasPassword) : "",
+    				link: permissionObject.link === undefined || permissionObject.link === null ? {} : permissionObject.link,
+    				inheritedFrom: permissionObject.inheritedFrom === undefined || permissionObject.inheritedFrom === null ? {} : permissionObject.inheritedFrom,
+    				invitation: permissionObject.invitation === undefined || permissionObject.invitation === null ? {} : permissionObject.invitation,
+    				grantedToV2: permissionObject.grantedToV2 === undefined || permissionObject.grantedToV2 === null ? {} : permissionObject.grantedToV2,
+    				grantedToIdentitiesV2: permissionObject.grantedToIdentitiesV2 === undefined || permissionObject.grantedToIdentitiesV2 === null ? [] : permissionObject.grantedToIdentitiesV2,
+    				application: permissionObject.application === undefined || permissionObject.application === null ? {} : permissionObject.application
+    			};
+    			if (includeRaw) {
+    				mappedPermission.raw = permissionObject;
+    			}
+    			responsePermissions.push(mappedPermission);
+    		}
+    
+    		response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    			siteId: resolvedSite.siteId,
+    			siteHostname: resolvedSite.siteHostname,
+    			sitePath: resolvedSite.sitePath,
+    			driveId: resolvedDrive.driveId,
+    			driveName: resolvedDrive.driveName,
+    			driveWebUrl: resolvedDrive.driveWebUrl,
+    			driveType: resolvedDrive.driveType,
+    			sharepointIds: resolvedDrive.sharepointIds,
+    			quota: resolvedDrive.quota,
+    			owner: resolvedDrive.owner,
+    			resolvedFromList: resolvedList !== null,
+    			listId: resolvedList === null ? "" : resolvedList.listId,
+    			listName: resolvedList === null ? "" : resolvedList.listName,
+    			listDisplayName: resolvedList === null ? "" : resolvedList.listDisplayName,
+    			listWebUrl: resolvedList === null ? "" : resolvedList.listWebUrl,
+    			listInfo: resolvedList === null ? {} : resolvedList.listInfo,
+    			listSharepointIds: resolvedList === null ? {} : resolvedList.sharepointIds,
+    			query: {
+    				itemId: targetItemId,
+    				recipientEmails: csvRecipients,
+    				recipientsCount: recipients.length,
+    				roles: normalizedRoles,
+    				messageProvided: !gs_isBlank(requestedMessage),
+    				requireSignIn: requestedRequireSignIn,
+    				sendInvitation: requestedSendInvitation,
+    				expirationDateTimeProvided: !gs_isBlank(requestedExpiration),
+    				retainInheritedPermissions: requestedRetainInherited,
+    				includeRawPermission: includeRaw
+    			},
+    			inviteResponse: {
+    				statusCode: inviteResponse.statusCode,
+    				hasValueArray: inviteBody.value instanceof Array
+    			},
+    			permissions: responsePermissions
+    		});
+    	} catch (e) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    	}
     }'
-↓response [steps.JsonToXmlStep-1772639411694]: 
+↓response [steps.JsonToXmlStep-1772719766560]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
     - xmlizable: 
@@ -593,82 +702,96 @@ comment: Creates one SharePoint Online drive item sharing link through Microsoft
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
-↓siteId [variables.RequestableVariable-1772639411741]: 
+↓siteId [variables.RequestableVariable-1772719766603]: 
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
-↓siteHostname [variables.RequestableVariable-1772639411805]: 
-  comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
-  description: SharePoint Online hostname
-↓sitePath [variables.RequestableVariable-1772639411869]: 
+↓siteHostname [variables.RequestableVariable-1772719766649]: 
+  comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+  description: SharePoint hostname
+↓sitePath [variables.RequestableVariable-1772719766704]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
   value: /sites/convertigo
-↓driveId [variables.RequestableVariable-1772639411936]: 
+↓driveId [variables.RequestableVariable-1772719766766]: 
   comment: Optional drive identifier. If provided, driveName/listId/listName are ignored.
   description: Optional Graph drive identifier
-↓driveName [variables.RequestableVariable-1772639412013]: 
+↓driveName [variables.RequestableVariable-1772719766838]: 
   comment: Drive name used to resolve driveId when driveId is not provided.
   description: SharePoint drive name
-↓listId [variables.RequestableVariable-1772639412106]: 
+↓listId [variables.RequestableVariable-1772719766916]: 
   comment: Optional list identifier used to resolve associated drive.
   description: Optional Graph list identifier
-↓listName [variables.RequestableVariable-1772639412194]: 
+↓listName [variables.RequestableVariable-1772719767002]: 
   comment: List display name or internal name used to resolve associated drive.
   description: SharePoint list name
-↓itemId [variables.RequestableVariable-1772639412293]: 
+↓itemId [variables.RequestableVariable-1772719767096]: 
   comment: Target drive item identifier.
   description: Target drive item id
-↓linkType [variables.RequestableVariable-1772639412404]: 
-  comment: Sharing link type (view, edit, embed, blocksDownload).
-  description: Link type
-  value: view
-↓scope [variables.RequestableVariable-1772639412515]: 
-  comment: Sharing link scope (anonymous, organization, users).
-  description: Link scope
-  value: organization
-↓password [variables.RequestableVariable-1772639412644]: 
-  comment: Optional password used when scope/type supports it.
-  description: Optional link password
-↓expirationDateTime [variables.RequestableVariable-1772639412786]: 
-  comment: Optional link expiration datetime in ISO-8601 format.
+↓recipientEmails [variables.RequestableVariable-1772719767199]: 
+  comment: Optional comma-separated list of recipient email addresses.
+  description: Recipient emails
+↓recipientsJson [variables.RequestableVariable-1772719767327]: 
+  comment: Optional JSON array of recipients (objects with email/alias or simple email strings).
+  description: JSON recipients array
+↓rolesCsv [variables.RequestableVariable-1772719767449]: 
+  comment: Roles as comma-separated values (read,write). Defaults to read.
+  description: Roles CSV
+  value: read
+↓message [variables.RequestableVariable-1772719767929]: 
+  comment: Optional invitation message sent by Graph.
+  description: Invitation message
+↓requireSignIn [variables.RequestableVariable-1772719768113]: 
+  comment: true requires invited recipients to sign in.
+  description: Require sign-in
+  value: true
+↓sendInvitation [variables.RequestableVariable-1772719768300]: 
+  comment: true asks Graph to send email invitations.
+  description: Send invitation
+  value: true
+↓expirationDateTime [variables.RequestableVariable-1772719768603]: 
+  comment: Optional invitation expiration datetime in ISO-8601 format.
   description: Optional expiration datetime
-↓retainInheritedPermissions [variables.RequestableVariable-1772639412939]: 
-  comment: Retains inherited permissions on first share when true.
+↓retainInheritedPermissions [variables.RequestableVariable-1772719768786]: 
+  comment: Retains inherited permissions on first invite when true.
   description: Retain inherited permissions
   value: true
-↓includeRawPermission [variables.RequestableVariable-1772639413095]: 
-  comment: true includes raw Graph permission payload under response.data.permission.raw.
+↓includeRawPermission [variables.RequestableVariable-1772719768975]: 
+  comment: true includes raw Graph permission payload under response.data.permissions[*].raw.
   description: Include raw Graph permission payload
   value: false
-↓accessToken [variables.RequestableVariable-1772639413257]: 
+↓provider [variables.RequestableVariable-1772719769158]: 
+  comment: Backend provider selection graph or onprem.
+  description: Provider selection graph or onprem
+  value: ${lib_Microsoft_Sharepoint.provider}
+↓accessToken [variables.RequestableVariable-1772719769349]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
-↓tenantId [variables.RequestableVariable-1772639413415]: 
+↓tenantId [variables.RequestableVariable-1772719769550]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
   value: ${Microsoft_AzGraph.tenantId}
-↓clientId [variables.RequestableVariable-1772639413590]: 
+↓clientId [variables.RequestableVariable-1772719769758]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
   value: ${Microsoft_AzGraph.clientId}
-↓clientSecret [variables.RequestableVariable-1772639413773]: 
+↓clientSecret [variables.RequestableVariable-1772719769971]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
   value: 
     - ↑ciphered: true
     - ↑traceable: false
-    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+    - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: '-1'
-↓TC_CreateDriveItemShareLink [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772639415391]: 
+↓TC_InviteDriveItemRecipients [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772719772152]: 
     value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772639415418]: 
+  ↓sitePath [variables.TestCaseVariable-1772719772177]: 
     value: /sites/test1
-  ↓driveName [variables.TestCaseVariable-1772639415454]: 
+  ↓driveName [variables.TestCaseVariable-1772719772211]: 
     value: Documents
-  ↓itemId [variables.TestCaseVariable-1772639415498]: 
+  ↓itemId [variables.TestCaseVariable-1772719772249]: 
     value: 01PETTHVHBULYXIKX2EZFIAFNZVAYMGFUP
-  ↓linkType [variables.TestCaseVariable-1772639415558]: 
-    value: view
-  ↓scope [variables.TestCaseVariable-1772639415617]: 
-    value: organization
+  ↓recipientEmails [variables.TestCaseVariable-1772719772298]: 
+    value: test1@convertigo.onmicrosoft.com
+  ↓rolesCsv [variables.TestCaseVariable-1772719772355]: 
+    value: write

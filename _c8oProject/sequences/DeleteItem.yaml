@@ -1,10 +1,10 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Resolves a SharePoint Online drive by site and drive identifiers using Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All|Files.Read.All|Files.ReadWrite.All)
-↓inputVars [steps.InputVariablesStep-1772620901001]: 
+comment: Deletes one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+↓inputVars [steps.InputVariablesStep-1772719751928]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
-↓ExecuteResolveDrive [steps.SimpleStep-1772620901002]: 
-  comment: Resolves site and drive identifiers through Microsoft Graph endpoints.
+↓ExecuteDeleteDriveItem [steps.SimpleStep-1772719751948]: 
+  comment: Resolves site and drive then deletes one drive item.
   expression: |
     'var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
@@ -23,6 +23,25 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
     		throw new java.lang.IllegalArgumentException("Missing required input: " + name);
     	}
     	return String(value);
+    };
+    
+    var gs_toBoolean = function(value, defaultValue) {
+    	if (value === null || value === undefined || String(value).trim().length === 0) {
+    		return defaultValue === true;
+    	}
+    	var normalized = String(value).toLowerCase();
+    	return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "y";
+    };
+    
+    var gs_parseInteger = function(name, value, defaultValue) {
+    	if (gs_isBlank(value)) {
+    		return defaultValue;
+    	}
+    	var parsed = parseInt(String(value), 10);
+    	if (isNaN(parsed)) {
+    		throw new java.lang.IllegalArgumentException("Invalid integer for " + name + ": " + value);
+    	}
+    	return parsed;
     };
     
     var gs_errorClass = function(error) {
@@ -144,6 +163,17 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
     	return JSON.parse(result.body);
     };
     
+    var gs_graphDelete = function(endpoint, token) {
+    	var result = gs_httpRequest("DELETE", endpoint, token, null, "", "application/json");
+    	if (result.statusCode !== 404 && (result.statusCode < 200 || result.statusCode >= 300)) {
+    		throw new java.lang.RuntimeException("Graph delete failed (" + result.statusCode + "): " + result.body);
+    	}
+    	return {
+    		statusCode: result.statusCode,
+    		body: result.body
+    	};
+    };
+    
     var gs_acquireAppToken = function(tenantIdValue, clientIdValue, clientSecretValue, scopeValue) {
     	var endpoint = "https://login.microsoftonline.com/" + gs_require("tenantId", tenantIdValue) + "/oauth2/v2.0/token";
     	var payload =
@@ -217,6 +247,22 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
     	return String(value).split("''").join("''");
     };
     
+    var gs_splitCsv = function(csvValue) {
+    	if (gs_isBlank(csvValue)) {
+    		return [];
+    	}
+    	var rawParts = String(csvValue).split(",");
+    	var normalized = [];
+    	var i;
+    	for (i = 0; i < rawParts.length; i++) {
+    		var trimmed = String(rawParts[i]).trim();
+    		if (trimmed.length > 0) {
+    			normalized.push(trimmed);
+    		}
+    	}
+    	return normalized;
+    };
+    
     var gs_normalizeDrive = function(driveObject) {
     	if (driveObject === null || driveObject === undefined) {
     		return {};
@@ -232,6 +278,32 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
     		quota: driveObject.quota === undefined || driveObject.quota === null ? {} : driveObject.quota,
     		owner: driveObject.owner === undefined || driveObject.owner === null ? {} : driveObject.owner
     	};
+    };
+    
+    var gs_normalizeDriveItem = function(itemObject, includeRaw) {
+    	var mapped = {
+    		itemId: gs_safeString(itemObject.id),
+    		name: gs_safeString(itemObject.name),
+    		webUrl: gs_safeString(itemObject.webUrl),
+    		size: itemObject.size === undefined || itemObject.size === null ? 0 : itemObject.size,
+    		eTag: gs_safeString(itemObject.eTag),
+    		cTag: gs_safeString(itemObject.cTag),
+    		createdDateTime: gs_safeString(itemObject.createdDateTime),
+    		lastModifiedDateTime: gs_safeString(itemObject.lastModifiedDateTime),
+    		file: itemObject.file === undefined || itemObject.file === null ? {} : itemObject.file,
+    		folder: itemObject.folder === undefined || itemObject.folder === null ? {} : itemObject.folder,
+    		image: itemObject.image === undefined || itemObject.image === null ? {} : itemObject.image,
+    		shared: itemObject.shared === undefined || itemObject.shared === null ? {} : itemObject.shared,
+    		parentReference: itemObject.parentReference === undefined || itemObject.parentReference === null ? {} : itemObject.parentReference,
+    		createdBy: itemObject.createdBy === undefined || itemObject.createdBy === null ? {} : itemObject.createdBy,
+    		lastModifiedBy: itemObject.lastModifiedBy === undefined || itemObject.lastModifiedBy === null ? {} : itemObject.lastModifiedBy,
+    		fileSystemInfo: itemObject.fileSystemInfo === undefined || itemObject.fileSystemInfo === null ? {} : itemObject.fileSystemInfo,
+    		sharepointIds: itemObject.sharepointIds === undefined || itemObject.sharepointIds === null ? {} : itemObject.sharepointIds
+    	};
+    	if (includeRaw) {
+    		mapped.raw = itemObject;
+    	}
+    	return mapped;
     };
     
     var gs_resolveSite = function(token, siteIdValue, siteHostnameValue, sitePathValue) {
@@ -316,8 +388,44 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
     	throw new java.lang.RuntimeException("Drive not found: " + driveNameValue);
     };
     
-    var graphOperation = "resolve_drive";
-    var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All|Files.Read.All|Files.ReadWrite.All";
+    var gs_resolveDrive = function(token, siteObject, driveIdValue, driveNameValue, listIdValue, listNameValue) {
+    	var explicitDriveId = gs_safeString(driveIdValue);
+    	var requestedDriveName = gs_safeString(driveNameValue);
+    	var explicitListId = gs_safeString(listIdValue);
+    	var requestedListName = gs_safeString(listNameValue);
+    
+    	if (gs_isBlank(explicitDriveId) && gs_isBlank(requestedDriveName) && gs_isBlank(explicitListId) && gs_isBlank(requestedListName)) {
+    		throw new java.lang.IllegalArgumentException("Provide driveId, driveName, listId or listName");
+    	}
+    
+    	var resolvedList = null;
+    	var resolvedDrive = null;
+    
+    	if (!gs_isBlank(explicitDriveId)) {
+    		var byIdEndpoint =
+    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(siteObject.siteId) +
+    			"/drives/" + gs_encodePathSegment(explicitDriveId) +
+    			"?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
+    		resolvedDrive = gs_normalizeDrive(gs_graphGetJson(byIdEndpoint, token));
+    	} else if (!gs_isBlank(explicitListId) || !gs_isBlank(requestedListName)) {
+    		resolvedList = gs_resolveList(token, siteObject.siteId, explicitListId, requestedListName);
+    		var byListEndpoint =
+    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(siteObject.siteId) +
+    			"/lists/" + gs_encodePathSegment(resolvedList.listId) +
+    			"/drive?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
+    		resolvedDrive = gs_normalizeDrive(gs_graphGetJson(byListEndpoint, token));
+    	} else {
+    		resolvedDrive = gs_findDriveByName(token, siteObject.siteId, requestedDriveName);
+    	}
+    
+    	return {
+    		drive: resolvedDrive,
+    		list: resolvedList
+    	};
+    };
+    
+    var graphOperation = "delete_drive_item";
+    var requiredPermission = "Files.ReadWrite.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
     
@@ -325,35 +433,35 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
     	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
     	tokenMode = tokenInfo.mode;
     
+    	var targetItemId = gs_require("itemId", itemId);
+    	if (String(targetItemId).toLowerCase() === "root") {
+    		throw new java.lang.IllegalArgumentException("Deleting drive root is not allowed. Provide a child item id.");
+    	}
+    
+    	var includeSnapshot = gs_toBoolean(includeDeletedItemSnapshot, false);
+    	var includeRaw = gs_toBoolean(includeRawItem, false);
+    	var selectedFields = gs_splitCsv(selectFields);
+    
     	var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
-    	var explicitDriveId = gs_safeString(driveId);
-    	var requestedDriveName = gs_safeString(driveName);
-    	var explicitListId = gs_safeString(listId);
-    	var requestedListName = gs_safeString(listName);
+    	var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
+    	var resolvedDrive = resolvedDriveData.drive;
+    	var resolvedList = resolvedDriveData.list;
     
-    	if (gs_isBlank(explicitDriveId) && gs_isBlank(requestedDriveName) && gs_isBlank(explicitListId) && gs_isBlank(requestedListName)) {
-    		throw new java.lang.IllegalArgumentException("Provide driveId, driveName, listId or listName");
+    	var snapshot = {};
+    	if (includeSnapshot) {
+    		var snapshotUrl =
+    			"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
+    			"/items/" + gs_encodePathSegment(targetItemId);
+    		if (selectedFields.length > 0) {
+    			snapshotUrl = gs_appendQueryParam(snapshotUrl, "$select", selectedFields.join(","));
+    		}
+    		snapshot = gs_normalizeDriveItem(gs_graphGetJson(snapshotUrl, tokenInfo.token), includeRaw);
     	}
     
-    	var resolvedDrive = null;
-    	var resolvedList = null;
-    
-    	if (!gs_isBlank(explicitDriveId)) {
-    		var byIdEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSite.siteId) +
-    			"/drives/" + gs_encodePathSegment(explicitDriveId) +
-    			"?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
-    		resolvedDrive = gs_normalizeDrive(gs_graphGetJson(byIdEndpoint, tokenInfo.token));
-    	} else if (!gs_isBlank(explicitListId) || !gs_isBlank(requestedListName)) {
-    		resolvedList = gs_resolveList(tokenInfo.token, resolvedSite.siteId, explicitListId, requestedListName);
-    		var byListEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSite.siteId) +
-    			"/lists/" + gs_encodePathSegment(resolvedList.listId) +
-    			"/drive?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
-    		resolvedDrive = gs_normalizeDrive(gs_graphGetJson(byListEndpoint, tokenInfo.token));
-    	} else {
-    		resolvedDrive = gs_findDriveByName(tokenInfo.token, resolvedSite.siteId, requestedDriveName);
-    	}
+    	var deleteUrl =
+    		"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
+    		"/items/" + gs_encodePathSegment(targetItemId);
+    	var deleteResult = gs_graphDelete(deleteUrl, tokenInfo.token);
     
     	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
     		siteId: resolvedSite.siteId,
@@ -363,8 +471,6 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
     		driveName: resolvedDrive.driveName,
     		driveWebUrl: resolvedDrive.driveWebUrl,
     		driveType: resolvedDrive.driveType,
-    		createdDateTime: resolvedDrive.createdDateTime,
-    		lastModifiedDateTime: resolvedDrive.lastModifiedDateTime,
     		sharepointIds: resolvedDrive.sharepointIds,
     		quota: resolvedDrive.quota,
     		owner: resolvedDrive.owner,
@@ -375,12 +481,22 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
     		listWebUrl: resolvedList === null ? "" : resolvedList.listWebUrl,
     		listInfo: resolvedList === null ? {} : resolvedList.listInfo,
     		listSharepointIds: resolvedList === null ? {} : resolvedList.sharepointIds,
-    		tokenPreview: tokenInfo.token.length > 20 ? tokenInfo.token.substring(0, 20) + "..." : tokenInfo.token
+    		query: {
+    			itemId: targetItemId,
+    			includeDeletedItemSnapshot: includeSnapshot,
+    			selectFields: selectedFields,
+    			includeRawItem: includeRaw
+    		},
+    		deleted: deleteResult.statusCode === 204 || deleteResult.statusCode === 404,
+    		deleteHttpStatus: deleteResult.statusCode,
+    		item: includeSnapshot ? snapshot : {
+    			itemId: String(targetItemId)
+    		}
     	});
     } catch (e) {
     	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
     }'
-↓response [steps.JsonToXmlStep-1772620901003]: 
+↓response [steps.JsonToXmlStep-1772719751990]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
     - xmlizable: 
@@ -394,51 +510,70 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
-↓siteId [variables.RequestableVariable-1772620901004]: 
+↓siteId [variables.RequestableVariable-1772719752026]: 
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
-↓siteHostname [variables.RequestableVariable-1772620901005]: 
+↓siteHostname [variables.RequestableVariable-1772719752072]: 
   comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
   description: SharePoint Online hostname
-↓sitePath [variables.RequestableVariable-1772620901006]: 
+↓sitePath [variables.RequestableVariable-1772719752124]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
   value: /sites/convertigo
-↓driveId [variables.RequestableVariable-1772620901007]: 
+↓driveId [variables.RequestableVariable-1772719752184]: 
   comment: Optional drive identifier. If provided, driveName/listId/listName are ignored.
   description: Optional Graph drive identifier
-↓driveName [variables.RequestableVariable-1772620901008]: 
-  comment: Drive name used to resolve a drive when driveId is not provided.
+↓driveName [variables.RequestableVariable-1772719752250]: 
+  comment: Drive name used to resolve driveId when driveId is not provided.
   description: SharePoint drive name
-↓listId [variables.RequestableVariable-1772620901009]: 
-  comment: Optional list identifier used to resolve the associated drive.
+↓listId [variables.RequestableVariable-1772719752323]: 
+  comment: Optional list identifier used to resolve associated drive.
   description: Optional Graph list identifier
-↓listName [variables.RequestableVariable-1772620901010]: 
-  comment: List display name or internal name used to resolve the associated drive.
+↓listName [variables.RequestableVariable-1772719752404]: 
+  comment: List display name or internal name used to resolve associated drive.
   description: SharePoint list name
-↓accessToken [variables.RequestableVariable-1772620901011]: 
+↓itemId [variables.RequestableVariable-1772719752493]: 
+  comment: Target drive item identifier to delete.
+  description: Target drive item id
+  required: true
+↓includeDeletedItemSnapshot [variables.RequestableVariable-1772719752589]: 
+  comment: true reads item before deletion and returns it in response.data.item.
+  description: Return deleted item snapshot
+  value: false
+↓selectFields [variables.RequestableVariable-1772719752692]: 
+  comment: Optional comma-separated list of Graph driveItem properties to select in returned snapshot.
+  description: Comma-separated property selection
+↓includeRawItem [variables.RequestableVariable-1772719752808]: 
+  comment: true includes raw Graph driveItem payload under item.raw when snapshot is enabled.
+  description: Include raw Graph payload
+  value: false
+↓accessToken [variables.RequestableVariable-1772719752930]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
-↓tenantId [variables.RequestableVariable-1772620901012]: 
+↓tenantId [variables.RequestableVariable-1772719753058]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
   value: ${Microsoft_AzGraph.tenantId}
-↓clientId [variables.RequestableVariable-1772620901013]: 
+↓clientId [variables.RequestableVariable-1772719753191]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
   value: ${Microsoft_AzGraph.clientId}
-↓clientSecret [variables.RequestableVariable-1772620901014]: 
+↓clientSecret [variables.RequestableVariable-1772719753331]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
   value: 
     - ↑ciphered: true
     - ↑traceable: false
-    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+    - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: '-1'
-↓TC_ResolveDrive [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772620901015]: 
+↓TC_DeleteDriveItem [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772719754642]: 
     value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772620901016]: 
+  ↓sitePath [variables.TestCaseVariable-1772719754663]: 
     value: /sites/test1
-  ↓driveName [variables.TestCaseVariable-1772620901017]: 
+  ↓driveName [variables.TestCaseVariable-1772719754691]: 
     value: Documents
+  ↓itemId [variables.TestCaseVariable-1772719754729]: 
+    value: 01PETTHVEATJSISNMAANFZGVYTAW3JNO6H
+  ↓includeDeletedItemSnapshot [variables.TestCaseVariable-1772719754773]: 
+    value: false

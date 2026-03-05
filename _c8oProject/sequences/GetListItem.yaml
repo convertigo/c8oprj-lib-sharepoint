@@ -1,12 +1,14 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Retrieves one SharePoint Online list item through Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+comment: Retrieves one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 ↓inputVars [steps.InputVariablesStep-1772620902001]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
 ↓ExecuteGetListItem [steps.SimpleStep-1772620902002]: 
   comment: Resolves site and list then retrieves one list item with optional field projection.
   expression: |
-    'var gs_isBlank = function(value) {
+    'include("js/sharepoint_provider.js");
+    
+    var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
     };
     
@@ -320,57 +322,82 @@ comment: Retrieves one SharePoint Online list item through Microsoft Graph. (Gra
     var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
+    var requestedProvider = sppr_normalizeProvider(provider, "graph");
     
-    try {
-    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
-    	tokenMode = tokenInfo.mode;
-    
-    	var targetItemId = gs_require("itemId", itemId);
-    	var includeRaw = gs_toBoolean(includeRawItem, false);
-    	var selectedFields = gs_splitCsv(selectFields);
-    
-    	var resolved = gs_resolveSiteAndList(
-    		tokenInfo.token,
-    		siteId,
-    		siteHostname,
-    		sitePath,
-    		listId,
-    		listName
-    	);
-    
-    	var requestUrl =
-    		"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolved.siteId) +
-    		"/lists/" + gs_encodePathSegment(resolved.listId) +
-    		"/items/" + gs_encodePathSegment(targetItemId);
-    
-    	var expandValue = "fields";
-    	if (selectedFields.length > 0) {
-    		expandValue = "fields($select=" + selectedFields.join(",") + ")";
+    if (requestedProvider === "onprem") {
+    	tokenMode = "onprem";
+    	try {
+    		sppr_ensureOnPremDispatch();
+    		response = sppr_onPremGetListItem({
+    			siteBaseUrl: siteBaseUrl,
+    			siteHostname: siteHostname,
+    			sitePath: sitePath,
+    			onPremProtocol: onPremProtocol,
+    			listId: listId,
+    			listName: listName,
+    			itemId: itemId,
+    			selectFields: selectFields,
+    			includeRawItem: includeRawItem,
+    			accessToken: accessToken,
+    			onPremUsername: onPremUsername,
+    			onPremPassword: onPremPassword,
+    			cookieHeader: cookieHeader
+    		});
+    	} catch (onPremError) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, onPremError);
     	}
-    	requestUrl = gs_appendQueryParam(requestUrl, "$expand", expandValue);
+    } else {
+    	try {
+    		var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    		tokenMode = tokenInfo.mode;
     
-    	var itemObject = gs_graphGetJson(requestUrl, tokenInfo.token);
-    	var item = gs_normalizeItem(itemObject, includeRaw);
+    		var targetItemId = gs_require("itemId", itemId);
+    		var includeRaw = gs_toBoolean(includeRawItem, false);
+    		var selectedFields = gs_splitCsv(selectFields);
     
-    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
-    		siteId: resolved.siteId,
-    		siteHostname: resolved.siteHostname,
-    		sitePath: resolved.sitePath,
-    		listId: resolved.listId,
-    		listName: resolved.listName,
-    		listDisplayName: resolved.listDisplayName,
-    		listWebUrl: resolved.listWebUrl,
-    		sharepointIds: resolved.sharepointIds,
-    		listInfo: resolved.listInfo,
-    		query: {
-    			itemId: targetItemId,
-    			selectFields: selectedFields,
-    			includeRawItem: includeRaw
-    		},
-    		item: item
-    	});
-    } catch (e) {
-    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    		var resolved = gs_resolveSiteAndList(
+    			tokenInfo.token,
+    			siteId,
+    			siteHostname,
+    			sitePath,
+    			listId,
+    			listName
+    		);
+    
+    		var requestUrl =
+    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolved.siteId) +
+    			"/lists/" + gs_encodePathSegment(resolved.listId) +
+    			"/items/" + gs_encodePathSegment(targetItemId);
+    
+    		var expandValue = "fields";
+    		if (selectedFields.length > 0) {
+    			expandValue = "fields($select=" + selectedFields.join(",") + ")";
+    		}
+    		requestUrl = gs_appendQueryParam(requestUrl, "$expand", expandValue);
+    
+    		var itemObject = gs_graphGetJson(requestUrl, tokenInfo.token);
+    		var item = gs_normalizeItem(itemObject, includeRaw);
+    
+    		response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    			siteId: resolved.siteId,
+    			siteHostname: resolved.siteHostname,
+    			sitePath: resolved.sitePath,
+    			listId: resolved.listId,
+    			listName: resolved.listName,
+    			listDisplayName: resolved.listDisplayName,
+    			listWebUrl: resolved.listWebUrl,
+    			sharepointIds: resolved.sharepointIds,
+    			listInfo: resolved.listInfo,
+    			query: {
+    				itemId: targetItemId,
+    				selectFields: selectedFields,
+    				includeRawItem: includeRaw
+    			},
+    			item: item
+    		});
+    	} catch (e) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    	}
     }'
 ↓response [steps.JsonToXmlStep-1772620902003]: 
   comment: Converts the JS response object into XML output.
@@ -390,8 +417,8 @@ comment: Retrieves one SharePoint Online list item through Microsoft Graph. (Gra
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
 ↓siteHostname [variables.RequestableVariable-1772620902005]: 
-  comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
-  description: SharePoint Online hostname
+  comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+  description: SharePoint hostname
 ↓sitePath [variables.RequestableVariable-1772620902006]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
@@ -431,6 +458,38 @@ comment: Retrieves one SharePoint Online list item through Microsoft Graph. (Gra
     - ↑ciphered: true
     - ↑traceable: false
     - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+  visibility: '-1'
+↓provider [variables.RequestableVariable-1772714813905]: 
+  comment: Backend provider selection graph or onprem.
+  description: Provider selection graph or onprem
+  value: ${lib_Microsoft_Sharepoint.provider}
+↓siteBaseUrl [variables.RequestableVariable-1772714813944]: 
+  comment: Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+  description: On-prem site base URL
+  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}
+↓onPremProtocol [variables.RequestableVariable-1772714813986]: 
+  comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+  description: On-prem protocol fallback
+  value: https
+↓onPremUsername [variables.RequestableVariable-1772714814037]: 
+  comment: Optional technical username for on-prem basic authentication.
+  description: On-prem technical username
+  value: ${lib_Microsoft_Sharepoint.onPrem.username}
+↓onPremPassword [variables.RequestableVariable-1772714814098]: 
+  comment: Optional technical password for on-prem basic authentication.
+  description: On-prem technical password
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb405245a4fafc73fbab6b6999c294cb356940c0e6fa2827adf0d777f2f4f3e526ac991
+  visibility: '-1'
+↓cookieHeader [variables.RequestableVariable-1772714814171]: 
+  comment: Optional Cookie header for on-prem forms authentication.
+  description: Optional on-prem Cookie header
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb40524d13591840f063c4918706e203c3286f7945be3bd1a0c33cb44b7f24f9d492d4c
   visibility: '-1'
 ↓TC_GetListItem [core.TestCase]: 
   ↓siteHostname [variables.TestCaseVariable-1772620902016]: 

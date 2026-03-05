@@ -115,9 +115,16 @@ FALLBACK_DRIVE_ITEM_ID = _env("FALLBACK_DRIVE_ITEM_ID", "01PETTHVHBULYXIKX2EZFIA
 EXISTING_PERMISSION_ID = _env("EXISTING_PERMISSION_ID", "")
 FALLBACK_PERMISSION_ID = _env("FALLBACK_PERMISSION_ID", "dGVzdDEgVmlzaXRvcnM")
 INVITE_RECIPIENT_EMAILS = _env("INVITE_RECIPIENT_EMAILS", "test1@convertigo.onmicrosoft.com")
+SUBSCRIPTION_NOTIFICATION_URL = _env("SUBSCRIPTION_NOTIFICATION_URL", "")
+SUBSCRIPTION_RESOURCE = _env("SUBSCRIPTION_RESOURCE", "")
+SUBSCRIPTION_EXPIRATION_DATETIME = _env("SUBSCRIPTION_EXPIRATION_DATETIME", "")
+SUBSCRIPTION_CHANGE_TYPE = _env("SUBSCRIPTION_CHANGE_TYPE", "updated")
+SUBSCRIPTION_CLIENT_STATE = _env("SUBSCRIPTION_CLIENT_STATE", "c8o-sharepoint-tests")
 
 RUN_SHARE_OPERATIONS = _env_bool("RUN_SHARE_OPERATIONS", "true")
 RUN_DESTRUCTIVE_CLEANUP = _env_bool("RUN_DESTRUCTIVE_CLEANUP", "true")
+RUN_RESTORE_VERSION = _env_bool("RUN_RESTORE_VERSION", "false")
+RUN_SUBSCRIPTION_OPERATIONS = _env_bool("RUN_SUBSCRIPTION_OPERATIONS", "false")
 REPORT_FILE = _env("REPORT_FILE", "build/logical-test-plan-report.json")
 
 # Mutable session state used by call_sequence.
@@ -331,10 +338,35 @@ def _extract_permission_id_from_data(data: Dict[str, Any]) -> str:
     return ""
 
 
+def _extract_version_id_from_data(data: Dict[str, Any]) -> str:
+    versions = data.get("versions")
+    if isinstance(versions, list):
+        for version in versions:
+            if isinstance(version, dict):
+                value = _first_non_empty(version.get("versionId"), version.get("id"))
+                if value:
+                    return value
+    version = data.get("version")
+    if isinstance(version, dict):
+        return _first_non_empty(version.get("versionId"), version.get("id"))
+    return ""
+
+
+def _extract_subscription_id_from_data(data: Dict[str, Any]) -> str:
+    value = _first_non_empty(data.get("subscriptionId"), data.get("id"))
+    if value:
+        return value
+    subscription = data.get("subscription")
+    if isinstance(subscription, dict):
+        return _first_non_empty(subscription.get("id"), subscription.get("subscriptionId"))
+    return ""
+
+
 class TestPlan:
     def __init__(self) -> None:
         self.results: List[Dict[str, Any]] = []
         self.ctx: Dict[str, Any] = {
+            "graph_access_token": ACCESS_TOKEN,
             "site_id": SITE_ID,
             "list_id": LIST_ID,
             "drive_id": DRIVE_ID,
@@ -349,6 +381,12 @@ class TestPlan:
             "share_permission_id": "",
             "listed_permission_id": "",
             "invited_permission_id": "",
+            "copy_operation_status_code": "",
+            "drive_delta_link": "",
+            "list_delta_link": "",
+            "version_id": "",
+            "subscription_id": "",
+            "batch_failed_count": "",
         }
         self.mandatory_failed = False
 
@@ -386,8 +424,12 @@ class TestPlan:
         if not enabled:
             self.add_result(phase, step, "SKIP", mandatory, "disabled by context/config")
             return False
+        effective_params = dict(params)
+        effective_token = _first_non_empty(self.ctx.get("graph_access_token", ""), "")
+        if effective_token and _first_non_empty(effective_params.get("accessToken", ""), "") == "":
+            effective_params["accessToken"] = effective_token
         try:
-            payload = call_sequence(sequence, params)
+            payload = call_sequence(sequence, effective_params)
             ok = response_ok(payload) if validator is None else bool(validator(payload))
             if ok:
                 if on_success is not None:
@@ -481,6 +523,13 @@ def main() -> int:
     list_updated_title = f"C8O List Item Updated {ts}"
     content_b64 = base64.b64encode(f"convertigo sharepoint plan {ts}".encode("utf-8")).decode("ascii")
     large_content_b64 = base64.b64encode(("0123456789ABCDEF" * 8192).encode("utf-8")).decode("ascii")
+    subscription_expiration_iso = _first_non_empty(
+        SUBSCRIPTION_EXPIRATION_DATETIME,
+        (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=50))
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
+    )
 
     print(f"Logical test plan for project {C8O_PROJECT}")
     print(f"Base URL: {C8O_BASE_URL}")
@@ -516,6 +565,9 @@ def main() -> int:
     def save_site(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
         ctx["site_id"] = _first_non_empty(response_data(payload).get("siteId"), ctx.get("site_id", ""))
 
+    def save_graph_access_token(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
+        ctx["graph_access_token"] = _first_non_empty(response_data(payload).get("token"), ctx.get("graph_access_token", ""))
+
     def save_list(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
         ctx["list_id"] = _first_non_empty(response_data(payload).get("listId"), ctx.get("list_id", ""))
 
@@ -550,6 +602,25 @@ def main() -> int:
         data = response_data(payload)
         ctx["copy_monitor_url"] = _first_non_empty(data.get("monitorUrl"), data.get("operationLocation"))
 
+    def save_copy_operation_status(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
+        data = response_data(payload)
+        ctx["copy_operation_status_code"] = _first_non_empty(data.get("statusCode"), "")
+
+    def save_list_delta(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
+        ctx["list_delta_link"] = _first_non_empty(response_data(payload).get("deltaLink"), ctx.get("list_delta_link", ""))
+
+    def save_drive_delta(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
+        ctx["drive_delta_link"] = _first_non_empty(response_data(payload).get("deltaLink"), ctx.get("drive_delta_link", ""))
+
+    def save_version(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
+        ctx["version_id"] = _extract_version_id_from_data(response_data(payload))
+
+    def save_subscription(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
+        ctx["subscription_id"] = _extract_subscription_id_from_data(response_data(payload))
+
+    def save_batch(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
+        ctx["batch_failed_count"] = _first_non_empty(response_data(payload).get("failedCount"), "0")
+
     def save_share_permission(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
         ctx["share_permission_id"] = _extract_permission_id_from_data(response_data(payload))
 
@@ -566,6 +637,7 @@ def main() -> int:
         "GetGraphAccessToken",
         {"includeTokenPayload": "false"},
         mandatory=True,
+        on_success=save_graph_access_token,
     )
     plan.run_step(
         "phase-1-bootstrap",
@@ -585,11 +657,51 @@ def main() -> int:
     )
     plan.run_step(
         "phase-1-bootstrap",
-        "ResolveDrive",
-        "ResolveDrive",
+        "ResolveLibrary",
+        "ResolveLibrary",
         drive_scope(),
         mandatory=True,
         on_success=save_drive,
+    )
+    plan.run_step(
+        "phase-1-bootstrap",
+        "ListSiteLists",
+        "ListSiteLists",
+        dict(site_scope(), top="20", maxPages="1"),
+        mandatory=True,
+    )
+    plan.run_step(
+        "phase-1-bootstrap",
+        "ListSiteDrives",
+        "ListSiteDrives",
+        dict(site_scope(), top="20", maxPages="1"),
+        mandatory=True,
+    )
+    plan.run_step(
+        "phase-1-bootstrap",
+        "ExecuteGraphBatch",
+        "ExecuteGraphBatch",
+        {
+            "batchJson": _json_dumps(
+                {
+                    "requests": [
+                        {
+                            "id": "1",
+                            "method": "GET",
+                            "url": f"/sites/{plan.ctx.get('site_id', '')}?$select=id,displayName,webUrl",
+                        },
+                        {
+                            "id": "2",
+                            "method": "GET",
+                            "url": f"/sites/{plan.ctx.get('site_id', '')}/drives?$top=1&$select=id,name",
+                        },
+                    ]
+                }
+            ),
+            "includeRawResponse": "false",
+        },
+        mandatory=True,
+        on_success=save_batch,
     )
 
     # Phase 2: List lifecycle.
@@ -600,6 +712,14 @@ def main() -> int:
         dict(list_scope(), top="10", maxPages="1", expandFields="true"),
         mandatory=True,
         on_success=save_first_list_item,
+    )
+    plan.run_step(
+        "phase-2-list",
+        "ListGetItemsDelta",
+        "ListGetItemsDelta",
+        dict(list_scope(), top="10", maxPages="1", expandFields="true"),
+        mandatory=False,
+        on_success=save_list_delta,
     )
     plan.run_step(
         "phase-2-list",
@@ -639,32 +759,40 @@ def main() -> int:
     # Phase 3: Drive/content lifecycle.
     plan.run_step(
         "phase-3-drive",
-        "GetDriveItem",
-        "GetDriveItem",
+        "GetItem",
+        "GetItem",
         dict(drive_scope(), itemId="root"),
         mandatory=True,
         on_success=save_root_item,
     )
     plan.run_step(
         "phase-3-drive",
-        "ListDriveItems",
-        "ListDriveItems",
+        "ListItems",
+        "ListItems",
         dict(drive_scope(), parentItemId="root", top="20", maxPages="1"),
         mandatory=True,
         on_success=save_first_drive_item,
     )
     plan.run_step(
         "phase-3-drive",
-        "CreateDriveFolder",
-        "CreateDriveFolder",
+        "ListItemsDelta",
+        "ListItemsDelta",
+        dict(drive_scope(), parentItemId="root", top="20", maxPages="1"),
+        mandatory=False,
+        on_success=save_drive_delta,
+    )
+    plan.run_step(
+        "phase-3-drive",
+        "CreateFolder",
+        "CreateFolder",
         dict(drive_scope(), parentItemId="root", folderName=folder_name, conflictBehavior="rename"),
         mandatory=True,
         on_success=save_created_folder,
     )
     plan.run_step(
         "phase-3-drive",
-        "UploadDriveItemContent",
-        "UploadDriveItemContent",
+        "UploadItemContent",
+        "UploadItemContent",
         dict(
             drive_scope(),
             parentItemId=_first_non_empty(plan.ctx.get("created_folder_item_id", ""), "root"),
@@ -677,31 +805,31 @@ def main() -> int:
     )
     plan.run_step(
         "phase-3-drive",
-        "DownloadDriveItemContent",
-        "DownloadDriveItemContent",
+        "DownloadItemContent",
+        "DownloadItemContent",
         dict(drive_scope(), itemId=plan.effective_drive_item_id(), includeContentBase64="true"),
         mandatory=True,
     )
     plan.run_step(
         "phase-3-drive",
-        "UpdateDriveItem",
-        "UpdateDriveItem",
+        "UpdateItem",
+        "UpdateItem",
         dict(drive_scope(), itemId=plan.effective_drive_item_id(), updateJson=_json_dumps({"name": moved_name})),
         mandatory=True,
         on_success=save_drive_item,
     )
     plan.run_step(
         "phase-3-drive",
-        "MoveDriveItem",
-        "MoveDriveItem",
+        "MoveItem",
+        "MoveItem",
         dict(drive_scope(), itemId=plan.effective_drive_item_id(), destinationParentItemId="root", newName=moved_name),
         mandatory=True,
         on_success=save_drive_item,
     )
     plan.run_step(
         "phase-3-drive",
-        "CopyDriveItem",
-        "CopyDriveItem",
+        "CopyItem",
+        "CopyItem",
         dict(
             drive_scope(),
             itemId=plan.effective_drive_item_id(),
@@ -714,8 +842,17 @@ def main() -> int:
     )
     plan.run_step(
         "phase-3-drive",
-        "UploadDriveItemLargeContent",
-        "UploadDriveItemLargeContent",
+        "GetCopyItemOperation",
+        "GetCopyItemOperation",
+        dict(monitorUrl=_first_non_empty(plan.ctx.get("copy_monitor_url", ""), ""), includeMonitorBody="true"),
+        mandatory=False,
+        enabled=_first_non_empty(plan.ctx.get("copy_monitor_url", ""), "") != "",
+        on_success=save_copy_operation_status,
+    )
+    plan.run_step(
+        "phase-3-drive",
+        "UploadItemLargeContent",
+        "UploadItemLargeContent",
         dict(
             drive_scope(),
             itemId=plan.effective_drive_item_id(),
@@ -725,12 +862,33 @@ def main() -> int:
         mandatory=True,
         on_success=save_drive_item,
     )
+    plan.run_step(
+        "phase-3-drive",
+        "ListItemVersions",
+        "ListItemVersions",
+        dict(drive_scope(), itemId=plan.effective_drive_item_id(), top="20", maxPages="1"),
+        mandatory=False,
+        on_success=save_version,
+    )
+    plan.run_step(
+        "phase-3-drive",
+        "RestoreItemVersion",
+        "RestoreItemVersion",
+        dict(
+            drive_scope(),
+            itemId=plan.effective_drive_item_id(),
+            versionId=_first_non_empty(plan.ctx.get("version_id", ""), ""),
+            includeItemSnapshot="false",
+        ),
+        mandatory=False,
+        enabled=RUN_RESTORE_VERSION and _first_non_empty(plan.ctx.get("version_id", ""), "") != "",
+    )
 
     # Phase 4: Sharing and permissions.
     plan.run_step(
         "phase-4-sharing",
-        "CreateDriveItemShareLink",
-        "CreateDriveItemShareLink",
+        "CreateShareLink",
+        "CreateShareLink",
         dict(drive_scope(), itemId=plan.effective_drive_item_id(), linkType="view", scope="organization"),
         mandatory=False,
         enabled=RUN_SHARE_OPERATIONS,
@@ -738,8 +896,8 @@ def main() -> int:
     )
     plan.run_step(
         "phase-4-sharing",
-        "ListDriveItemPermissions",
-        "ListDriveItemPermissions",
+        "ListItemPermissions",
+        "ListItemPermissions",
         dict(drive_scope(), itemId=plan.effective_drive_item_id(), top="100", maxPages="2"),
         mandatory=False,
         enabled=RUN_SHARE_OPERATIONS,
@@ -747,8 +905,8 @@ def main() -> int:
     )
     plan.run_step(
         "phase-4-sharing",
-        "InviteDriveItemRecipients",
-        "InviteDriveItemRecipients",
+        "InviteItemRecipients",
+        "InviteItemRecipients",
         dict(
             drive_scope(),
             itemId=plan.effective_drive_item_id(),
@@ -762,8 +920,35 @@ def main() -> int:
     )
     plan.run_step(
         "phase-4-sharing",
-        "DeleteDriveItemPermission",
-        "DeleteDriveItemPermission",
+        "CreateGraphSubscription",
+        "CreateGraphSubscription",
+        dict(
+            resource=_first_non_empty(
+                SUBSCRIPTION_RESOURCE,
+                f"/sites/{plan.ctx.get('site_id', '')}/drives/{plan.ctx.get('drive_id', '')}/root",
+            ),
+            changeType=SUBSCRIPTION_CHANGE_TYPE,
+            notificationUrl=SUBSCRIPTION_NOTIFICATION_URL,
+            expirationDateTime=subscription_expiration_iso,
+            clientState=SUBSCRIPTION_CLIENT_STATE,
+            includeResourceData="false",
+        ),
+        mandatory=False,
+        enabled=RUN_SUBSCRIPTION_OPERATIONS and SUBSCRIPTION_NOTIFICATION_URL.strip() != "",
+        on_success=save_subscription,
+    )
+    plan.run_step(
+        "phase-4-sharing",
+        "DeleteGraphSubscription",
+        "DeleteGraphSubscription",
+        dict(subscriptionId=_first_non_empty(plan.ctx.get("subscription_id", ""), "")),
+        mandatory=False,
+        enabled=RUN_SUBSCRIPTION_OPERATIONS and _first_non_empty(plan.ctx.get("subscription_id", ""), "") != "",
+    )
+    plan.run_step(
+        "phase-4-sharing",
+        "DeleteItemPermission",
+        "DeleteItemPermission",
         dict(
             drive_scope(),
             itemId=plan.effective_drive_item_id(),
@@ -777,8 +962,8 @@ def main() -> int:
     # Phase 5: Cleanup.
     plan.run_step(
         "phase-5-cleanup",
-        "DeleteDriveItem",
-        "DeleteDriveItem",
+        "DeleteItem",
+        "DeleteItem",
         dict(drive_scope(), itemId=plan.effective_drive_item_id(), includeDeletedItemSnapshot="false"),
         mandatory=True,
         enabled=RUN_DESTRUCTIVE_CLEANUP,
@@ -786,7 +971,7 @@ def main() -> int:
     plan.run_step(
         "phase-5-cleanup",
         "DeleteDriveFolderCleanup",
-        "DeleteDriveItem",
+        "DeleteItem",
         dict(drive_scope(), itemId=_first_non_empty(plan.ctx.get("created_folder_item_id", ""), "root"), includeDeletedItemSnapshot="false"),
         mandatory=False,
         enabled=RUN_DESTRUCTIVE_CLEANUP and _first_non_empty(plan.ctx.get("created_folder_item_id", ""), "") != "",

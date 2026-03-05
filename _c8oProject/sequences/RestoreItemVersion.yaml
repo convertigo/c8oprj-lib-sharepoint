@@ -1,14 +1,12 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Updates one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.ReadWrite.All)
-↓inputVars [steps.InputVariablesStep-1772620911001]: 
+comment: Restores one historical version of a drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+↓inputVars [steps.InputVariablesStep-1772719795520]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
-↓ExecuteUpdateListItem [steps.SimpleStep-1772620911002]: 
-  comment: Resolves site and list then updates list item fields through provider-specific API.
+↓ExecuteRestoreDriveItemVersion [steps.SimpleStep-1772719795542]: 
+  comment: Resolves site and drive then calls restoreVersion action on the selected version id.
   expression: |
-    'include("js/sharepoint_provider.js");
-    
-    var gs_isBlank = function(value) {
+    'var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
     };
     
@@ -33,6 +31,17 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     	}
     	var normalized = String(value).toLowerCase();
     	return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "y";
+    };
+    
+    var gs_parseInteger = function(name, value, defaultValue) {
+    	if (gs_isBlank(value)) {
+    		return defaultValue;
+    	}
+    	var parsed = parseInt(String(value), 10);
+    	if (isNaN(parsed)) {
+    		throw new java.lang.IllegalArgumentException("Invalid integer for " + name + ": " + value);
+    	}
+    	return parsed;
     };
     
     var gs_errorClass = function(error) {
@@ -108,7 +117,7 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     	return url + separator + gs_encodePathSegment(name) + "=" + gs_encodePathSegment(value);
     };
     
-    var gs_httpRequest = function(method, endpoint, bearerToken, payload, contentType, accept) {
+    var gs_httpRequest = function(method, endpoint, bearerToken, payload, contentType, accept, headers) {
     	var url = new java.net.URL(String(endpoint));
     	var connection = url.openConnection();
     	var normalizedMethod = String(method).toUpperCase();
@@ -139,6 +148,16 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     	if (patchOverride) {
     		connection.setRequestProperty("X-HTTP-Method-Override", "PATCH");
     	}
+    	if (headers !== null && headers !== undefined) {
+    		for (var headerName in headers) {
+    			if (headers.hasOwnProperty(headerName)) {
+    				var headerValue = headers[headerName];
+    				if (!gs_isBlank(headerValue)) {
+    					connection.setRequestProperty(String(headerName), String(headerValue));
+    				}
+    			}
+    		}
+    	}
     
     	if (payload !== null && payload !== undefined) {
     		connection.setDoOutput(true);
@@ -157,12 +176,16 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     	var body = gs_readAll(statusCode >= 200 && statusCode < 300 ? connection.getInputStream() : connection.getErrorStream());
     	return {
     		statusCode: statusCode,
-    		body: body
+    		body: body,
+    		location: gs_safeString(connection.getHeaderField("Location")),
+    		retryAfter: gs_safeString(connection.getHeaderField("Retry-After")),
+    		requestId: gs_safeString(connection.getHeaderField("request-id")),
+    		clientRequestId: gs_safeString(connection.getHeaderField("client-request-id"))
     	};
     };
     
     var gs_graphGetJson = function(endpoint, token) {
-    	var result = gs_httpRequest("GET", endpoint, token, null, "", "application/json");
+    	var result = gs_httpRequest("GET", endpoint, token, null, "", "application/json", null);
     	if (result.statusCode < 200 || result.statusCode >= 300) {
     		throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
     	}
@@ -172,31 +195,20 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     	return JSON.parse(result.body);
     };
     
-    var gs_graphPatchJson = function(endpoint, token, payloadObject) {
-    	var payloadString = JSON.stringify(payloadObject);
-    	var requestBuilder = java.net.http.HttpRequest.newBuilder(java.net.URI.create(String(endpoint)));
-    	requestBuilder.header("Accept", "application/json");
-    	requestBuilder.header("Content-Type", "application/json");
-    	if (!gs_isBlank(token)) {
-    		requestBuilder.header("Authorization", "Bearer " + String(token));
+    var gs_graphPostJson = function(endpoint, token, payloadObject, headers) {
+    	var payload = payloadObject === null || payloadObject === undefined ? "{}" : JSON.stringify(payloadObject);
+    	var result = gs_httpRequest("POST", endpoint, token, payload, "application/json", "application/json", headers);
+    	if (result.statusCode < 200 || result.statusCode >= 300) {
+    		throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
     	}
-    	requestBuilder.method("PATCH", java.net.http.HttpRequest.BodyPublishers.ofString(payloadString));
-    
-    	var response = java.net.http.HttpClient
-    		.newBuilder()
-    		.followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
-    		.build()
-    		.send(requestBuilder.build(), java.net.http.HttpResponse.BodyHandlers.ofString());
-    
-    	var statusCode = response.statusCode();
-    	var body = gs_safeString(response.body());
-    	if (statusCode < 200 || statusCode >= 300) {
-    		throw new java.lang.RuntimeException("Graph patch failed (" + statusCode + "): " + body);
-    	}
-    	if (gs_isBlank(body)) {
+    	if (gs_isBlank(result.body)) {
     		return {};
     	}
-    	return JSON.parse(body);
+    	return JSON.parse(result.body);
+    };
+    
+    var gs_graphDelete = function(endpoint, token) {
+    	return gs_httpRequest("DELETE", endpoint, token, null, "", "application/json", null);
     };
     
     var gs_acquireAppToken = function(tenantIdValue, clientIdValue, clientSecretValue, scopeValue) {
@@ -207,7 +219,7 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     		"&scope=" + gs_urlEncode(gs_defaultString(scopeValue, "https://graph.microsoft.com/.default")) +
     		"&grant_type=client_credentials";
     
-    	var tokenResponse = gs_httpRequest("POST", endpoint, "", payload, "application/x-www-form-urlencoded", "application/json");
+    	var tokenResponse = gs_httpRequest("POST", endpoint, "", payload, "application/x-www-form-urlencoded", "application/json", null);
     	if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
     		throw new java.lang.RuntimeException("Token endpoint failed (" + tokenResponse.statusCode + "): " + tokenResponse.body);
     	}
@@ -302,7 +314,7 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     	return parsed;
     };
     
-    var gs_resolveSiteAndList = function(token, siteIdValue, siteHostnameValue, sitePathValue, listIdValue, listNameValue) {
+    var gs_resolveSite = function(token, siteIdValue, siteHostnameValue, sitePathValue) {
     	var resolvedSiteId = gs_safeString(siteIdValue);
     	var resolvedSiteHostname = "";
     	var resolvedSitePath = "";
@@ -320,6 +332,14 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     		resolvedSiteId = gs_require("siteId", siteObject.id);
     	}
     
+    	return {
+    		siteId: resolvedSiteId,
+    		siteHostname: resolvedSiteHostname,
+    		sitePath: resolvedSitePath
+    	};
+    };
+    
+    var gs_resolveList = function(token, resolvedSiteId, listIdValue, listNameValue) {
     	var resolvedListId = gs_safeString(listIdValue);
     	var requestedListName = gs_safeString(listNameValue);
     	if (gs_isBlank(resolvedListId) && gs_isBlank(requestedListName)) {
@@ -338,7 +358,7 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
     			"/lists?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
     		var lookup = gs_odataEscapeString(requestedListName);
-    		queryEndpoint = gs_appendQueryParam(queryEndpoint, "$filter", "displayName eq ''" + lookup + "''");
+    		queryEndpoint = gs_appendQueryParam(queryEndpoint, "$filter", "displayName eq ''" + lookup + "'' or name eq ''" + lookup + "''");
     		var queryObject = gs_graphGetJson(queryEndpoint, token);
     		if (!(queryObject.value instanceof Array) || queryObject.value.length === 0) {
     			throw new java.lang.RuntimeException("List not found: " + requestedListName);
@@ -348,9 +368,6 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     	}
     
     	return {
-    		siteId: resolvedSiteId,
-    		siteHostname: resolvedSiteHostname,
-    		sitePath: resolvedSitePath,
     		listId: gs_safeString(resolvedListId),
     		listName: gs_safeString(listObject.name),
     		listDisplayName: gs_safeString(listObject.displayName),
@@ -360,131 +377,117 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     	};
     };
     
-    var gs_normalizeItem = function(itemObject, includeRaw) {
-    	var mapped = {
-    		itemId: gs_safeString(itemObject.id),
-    		eTag: gs_safeString(itemObject.eTag),
-    		createdDateTime: gs_safeString(itemObject.createdDateTime),
-    		lastModifiedDateTime: gs_safeString(itemObject.lastModifiedDateTime),
-    		webUrl: gs_safeString(itemObject.webUrl),
-    		contentType: itemObject.contentType === undefined || itemObject.contentType === null ? {} : itemObject.contentType,
-    		fields: itemObject.fields === undefined || itemObject.fields === null ? {} : itemObject.fields,
-    		sharepointIds: itemObject.sharepointIds === undefined || itemObject.sharepointIds === null ? {} : itemObject.sharepointIds
-    	};
-    	if (includeRaw) {
-    		mapped.raw = itemObject;
+    var gs_findDriveByName = function(token, resolvedSiteId, driveNameValue) {
+    	var endpoint =
+    		"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
+    		"/drives?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
+    	var drivesResponse = gs_graphGetJson(endpoint, token);
+    	if (!(drivesResponse.value instanceof Array) || drivesResponse.value.length === 0) {
+    		throw new java.lang.RuntimeException("No drive found for site: " + resolvedSiteId);
     	}
-    	return mapped;
+    
+    	var wantedName = gs_safeString(driveNameValue).toLowerCase();
+    	var i;
+    	for (i = 0; i < drivesResponse.value.length; i++) {
+    		if (gs_safeString(drivesResponse.value[i].name).toLowerCase() === wantedName) {
+    			return drivesResponse.value[i];
+    		}
+    	}
+    	throw new java.lang.RuntimeException("Drive not found: " + driveNameValue);
     };
     
-    var graphOperation = "update_list_item";
-    var requiredPermission = "Sites.ReadWrite.All";
+    var gs_resolveDrive = function(token, siteObject, driveIdValue, driveNameValue, listIdValue, listNameValue) {
+    	var explicitDriveId = gs_safeString(driveIdValue);
+    	var requestedDriveName = gs_safeString(driveNameValue);
+    	var explicitListId = gs_safeString(listIdValue);
+    	var requestedListName = gs_safeString(listNameValue);
+    
+    	if (gs_isBlank(explicitDriveId) && gs_isBlank(requestedDriveName) && gs_isBlank(explicitListId) && gs_isBlank(requestedListName)) {
+    		throw new java.lang.IllegalArgumentException("Provide driveId, driveName, listId or listName");
+    	}
+    
+    	var resolvedList = null;
+    	var resolvedDrive = null;
+    
+    	if (!gs_isBlank(explicitDriveId)) {
+    		var byIdEndpoint =
+    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(siteObject.siteId) +
+    			"/drives/" + gs_encodePathSegment(explicitDriveId) +
+    			"?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
+    		resolvedDrive = gs_graphGetJson(byIdEndpoint, token);
+    	} else if (!gs_isBlank(explicitListId) || !gs_isBlank(requestedListName)) {
+    		resolvedList = gs_resolveList(token, siteObject.siteId, explicitListId, requestedListName);
+    		var byListEndpoint =
+    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(siteObject.siteId) +
+    			"/lists/" + gs_encodePathSegment(resolvedList.listId) +
+    			"/drive?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
+    		resolvedDrive = gs_graphGetJson(byListEndpoint, token);
+    	} else {
+    		resolvedDrive = gs_findDriveByName(token, siteObject.siteId, requestedDriveName);
+    	}
+    
+    	return {
+    		drive: resolvedDrive,
+    		list: resolvedList
+    	};
+    };
+    
+    var graphOperation = "restore_drive_item_version";
+    var requiredPermission = "Files.ReadWrite.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
-    var requestedProvider = sppr_normalizeProvider(provider, "graph");
     
-    if (requestedProvider === "onprem") {
-    	tokenMode = "onprem";
-    	try {
-    		sppr_ensureOnPremDispatch();
-    		response = sppr_onPremUpdateListItem({
-    			siteBaseUrl: siteBaseUrl,
-    			siteHostname: siteHostname,
-    			sitePath: sitePath,
-    			onPremProtocol: onPremProtocol,
-    			listId: listId,
-    			listName: listName,
-    			itemId: itemId,
-    			fieldsJson: fieldsJson,
-    			ifMatch: "*",
-    			returnUpdatedItem: returnUpdatedItem,
-    			selectFields: selectFields,
-    			expandFieldValuesAsText: false,
-    			includeRawItem: includeRawItem,
-    			accessToken: accessToken,
-    			onPremUsername: onPremUsername,
-    			onPremPassword: onPremPassword,
-    			cookieHeader: cookieHeader
-    		});
-    	} catch (onPremError) {
-    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, onPremError);
-    	}
-    } else {
-    	try {
-    		var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
-    		tokenMode = tokenInfo.mode;
+    try {
+    var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    tokenMode = tokenInfo.mode;
     
-    		var targetItemId = String(gs_require("itemId", itemId)).trim();
-    		if (targetItemId.length > 1 && targetItemId.charAt(0) === "\"" && targetItemId.charAt(targetItemId.length - 1) === "\"") {
-    			targetItemId = targetItemId.substring(1, targetItemId.length - 1);
-    		}
-    		if (targetItemId.length === 0) {
-    			throw new java.lang.IllegalArgumentException("itemId cannot be empty");
-    		}
-    		var fieldsObject = gs_parseJsonObject("fieldsJson", fieldsJson);
-    		var includeRaw = gs_toBoolean(includeRawItem, false);
-    		var shouldReturnUpdatedItem = gs_toBoolean(returnUpdatedItem, true);
-    		var selectedFields = gs_splitCsv(selectFields);
+    var targetItemId = gs_require("itemId", itemId);
+    if (targetItemId.toLowerCase() === "root") {
+    	throw new java.lang.IllegalArgumentException("Restore is available on file items, not root");
+    }
+    var targetVersionId = gs_require("versionId", versionId);
+    var includeItemSnapshotFlag = gs_toBoolean(includeItemSnapshot, false);
     
-    		var resolved = gs_resolveSiteAndList(
-    			tokenInfo.token,
-    			siteId,
-    			siteHostname,
-    			sitePath,
-    			listId,
-    			listName
-    		);
+    var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
+    var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
+    var resolvedDrive = resolvedDriveData.drive;
+    var resolvedList = resolvedDriveData.list;
     
-    		var patchFieldsEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolved.siteId) +
-    			"/lists/" + gs_encodePathSegment(resolved.listId) +
-    			"/items/" + gs_encodePathSegment(targetItemId) +
-    			"/fields";
+    var restoreEndpoint = "https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(gs_safeString(resolvedDrive.id)) + "/items/" + gs_encodePathSegment(targetItemId) + "/versions/" + gs_encodePathSegment(targetVersionId) + "/restoreVersion";
+    var restoreResult = gs_httpRequest("POST", restoreEndpoint, tokenInfo.token, null, "", "application/json", null);
+    if (restoreResult.statusCode < 200 || restoreResult.statusCode >= 300) {
+    	throw new java.lang.RuntimeException("Graph restoreVersion failed (" + restoreResult.statusCode + "): " + restoreResult.body);
+    }
     
-    		var updatedFields = gs_graphPatchJson(patchFieldsEndpoint, tokenInfo.token, fieldsObject);
-    		var item = {
-    			itemId: String(targetItemId),
-    			fields: updatedFields
-    		};
+    var itemSnapshot = {};
+    if (includeItemSnapshotFlag) {
+    	var itemEndpoint = "https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(gs_safeString(resolvedDrive.id)) + "/items/" + gs_encodePathSegment(targetItemId) + "?$select=id,name,webUrl,size,eTag,cTag,createdDateTime,lastModifiedDateTime,file,folder,parentReference,fileSystemInfo,shared,sharepointIds";
+    	itemSnapshot = gs_graphGetJson(itemEndpoint, tokenInfo.token);
+    }
     
-    		if (shouldReturnUpdatedItem) {
-    			var getUrl =
-    				"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolved.siteId) +
-    				"/lists/" + gs_encodePathSegment(resolved.listId) +
-    				"/items/" + gs_encodePathSegment(targetItemId);
-    			var expandValue = "fields";
-    			if (selectedFields.length > 0) {
-    				expandValue = "fields($select=" + selectedFields.join(",") + ")";
-    			}
-    			getUrl = gs_appendQueryParam(getUrl, "$expand", expandValue);
-    			item = gs_normalizeItem(gs_graphGetJson(getUrl, tokenInfo.token), includeRaw);
-    		} else if (includeRaw) {
-    			item.raw = updatedFields;
-    		}
-    
-    		response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
-    			siteId: resolved.siteId,
-    			siteHostname: resolved.siteHostname,
-    			sitePath: resolved.sitePath,
-    			listId: resolved.listId,
-    			listName: resolved.listName,
-    			listDisplayName: resolved.listDisplayName,
-    			listWebUrl: resolved.listWebUrl,
-    			sharepointIds: resolved.sharepointIds,
-    			listInfo: resolved.listInfo,
-    			query: {
-    				itemId: targetItemId,
-    				returnUpdatedItem: shouldReturnUpdatedItem,
-    				selectFields: selectedFields,
-    				includeRawItem: includeRaw
-    			},
-    			item: item
-    		});
-    	} catch (e) {
-    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
-    	}
+    response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    	siteId: resolvedSite.siteId,
+    	siteHostname: resolvedSite.siteHostname,
+    	sitePath: resolvedSite.sitePath,
+    	driveId: gs_safeString(resolvedDrive.id),
+    	driveName: gs_safeString(resolvedDrive.name),
+    	driveWebUrl: gs_safeString(resolvedDrive.webUrl),
+    	resolvedFromList: resolvedList !== null,
+    	listId: resolvedList === null ? "" : resolvedList.listId,
+    	listName: resolvedList === null ? "" : resolvedList.listName,
+    	itemId: targetItemId,
+    	versionId: targetVersionId,
+    	restoreRequest: {
+    		statusCode: restoreResult.statusCode,
+    		requestId: restoreResult.requestId,
+    		clientRequestId: restoreResult.clientRequestId
+    	},
+    	itemSnapshot: itemSnapshot
+    });
+    } catch (e) {
+    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
     }'
-↓response [steps.JsonToXmlStep-1772620911003]: 
+↓response [steps.JsonToXmlStep-1772719795570]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
     - xmlizable: 
@@ -498,101 +501,68 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
-↓siteId [variables.RequestableVariable-1772620911004]: 
+↓siteId [variables.RequestableVariable-1772719795606]: 
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
-↓siteHostname [variables.RequestableVariable-1772620911005]: 
-  comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
-  description: SharePoint hostname
-↓sitePath [variables.RequestableVariable-1772620911006]: 
+↓siteHostname [variables.RequestableVariable-1772719795649]: 
+  comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
+  description: SharePoint Online hostname
+↓sitePath [variables.RequestableVariable-1772719795700]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
-  value: /sites/convertigo
-↓listId [variables.RequestableVariable-1772620911007]: 
-  comment: Optional list identifier. If provided, listName is ignored.
+  value: /sites/test1
+↓driveId [variables.RequestableVariable-1772719795761]: 
+  comment: Optional drive identifier. If provided, driveName/listId/listName are ignored.
+  description: Optional Graph drive identifier
+↓driveName [variables.RequestableVariable-1772719795828]: 
+  comment: Drive name used to resolve driveId when driveId is not provided.
+  description: SharePoint drive name
+  value: Documents
+↓listId [variables.RequestableVariable-1772719795901]: 
+  comment: Optional list identifier used to resolve associated drive.
   description: Optional Graph list identifier
-↓listName [variables.RequestableVariable-1772620911008]: 
-  comment: List display name or internal name used to resolve listId.
+↓listName [variables.RequestableVariable-1772719795985]: 
+  comment: List display name or internal name used to resolve associated drive.
   description: SharePoint list name
-↓itemId [variables.RequestableVariable-1772620911009]: 
-  comment: Target SharePoint list item identifier.
-  description: SharePoint list item id
-  required: true
-↓fieldsJson [variables.RequestableVariable-1772620911010]: 
-  comment: JSON object payload used to patch list item fields.
-  description: JSON object for fields patch payload
-  required: true
-  value: '{}'
-↓returnUpdatedItem [variables.RequestableVariable-1772620911011]: 
-  comment: true reloads updated item with optional field projection before returning.
-  description: Return updated item details
-  value: true
-↓selectFields [variables.RequestableVariable-1772620911012]: 
-  comment: Optional comma-separated list of field internal names projected in returned item.fields.
-  description: Comma-separated field selection
-↓includeRawItem [variables.RequestableVariable-1772620911013]: 
-  comment: true includes raw Graph payload under item.raw.
-  description: Include raw Graph payload
+↓itemId [variables.RequestableVariable-1772719796073]: 
+  comment: Drive item identifier to restore from version history.
+  description: Drive item id
+↓versionId [variables.RequestableVariable-1772719796169]: 
+  comment: Version identifier returned by ListDriveItemVersions.
+  description: Drive item version id
+↓includeItemSnapshot [variables.RequestableVariable-1772719796269]: 
+  comment: true fetches current item snapshot after restore operation.
+  description: Include item snapshot
   value: false
-↓accessToken [variables.RequestableVariable-1772620911014]: 
+↓accessToken [variables.RequestableVariable-1772719796378]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
-↓tenantId [variables.RequestableVariable-1772620911015]: 
+↓tenantId [variables.RequestableVariable-1772719796501]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
   value: ${Microsoft_AzGraph.tenantId}
-↓clientId [variables.RequestableVariable-1772620911016]: 
+↓clientId [variables.RequestableVariable-1772719796633]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
   value: ${Microsoft_AzGraph.clientId}
-↓clientSecret [variables.RequestableVariable-1772620911017]: 
+↓clientSecret [variables.RequestableVariable-1772719796775]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
   value: 
     - ↑ciphered: true
     - ↑traceable: false
-    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+    - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: '-1'
-↓provider [variables.RequestableVariable-1772714469147]: 
-  comment: Backend provider selection graph or onprem.
-  description: Provider selection graph or onprem
-  value: ${lib_Microsoft_Sharepoint.provider}
-↓siteBaseUrl [variables.RequestableVariable-1772714469188]: 
-  comment: Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
-  description: On-prem site base URL
-  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}
-↓onPremProtocol [variables.RequestableVariable-1772714469228]: 
-  comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
-  description: On-prem protocol fallback
-  value: https
-↓onPremUsername [variables.RequestableVariable-1772714469278]: 
-  comment: Optional technical username for on-prem basic authentication.
-  description: On-prem technical username
-  value: ${lib_Microsoft_Sharepoint.onPrem.username}
-↓onPremPassword [variables.RequestableVariable-1772714469335]: 
-  comment: Optional technical password for on-prem basic authentication.
-  description: On-prem technical password
-  value: 
-    - ↑ciphered: true
-    - ↑traceable: false
-    - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb405245a4fafc73fbab6b6999c294cb356940c0e6fa2827adf0d777f2f4f3e526ac991
-  visibility: '-1'
-↓cookieHeader [variables.RequestableVariable-1772714469408]: 
-  comment: Optional Cookie header for on-prem forms authentication.
-  description: Optional on-prem Cookie header
-  value: 
-    - ↑ciphered: true
-    - ↑traceable: false
-    - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb40524d13591840f063c4918706e203c3286f7945be3bd1a0c33cb44b7f24f9d492d4c
-  visibility: '-1'
-↓TC_UpdateListItem [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772620911018]: 
+↓TC_RestoreDriveItemVersion [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772719798059]: 
     value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772620911019]: 
+  ↓sitePath [variables.TestCaseVariable-1772719798078]: 
     value: /sites/test1
-  ↓listName [variables.TestCaseVariable-1772620911020]: 
-    value: Web Template Extensions
-  ↓itemId [variables.TestCaseVariable-1772620911021]: 
-    value: '"8"'
-  ↓fieldsJson [variables.TestCaseVariable-1772620911022]: 
-    value: '{"Title":"Updated from Convertigo"}'
+  ↓driveName [variables.TestCaseVariable-1772719798109]: 
+    value: Documents
+  ↓itemId [variables.TestCaseVariable-1772719798145]: 
+    value: 01PETTHVHBULYXIKX2EZFIAFNZVAYMGFUP
+  ↓versionId [variables.TestCaseVariable-1772719798190]: 
+    value: 1.0
+  ↓includeItemSnapshot [variables.TestCaseVariable-1772719798242]: 
+    value: false

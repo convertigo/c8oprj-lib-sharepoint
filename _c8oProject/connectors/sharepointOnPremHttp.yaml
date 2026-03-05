@@ -1,0 +1,43 @@
+baseDir: ${lib_Microsoft_Sharepoint.onPrem.http.baseDir=/}
+comment: Internal HTTP connector scaffold for SharePoint on-prem requests.
+https: ${lib_Microsoft_Sharepoint.onPrem.http.https=true}
+port: ${lib_Microsoft_Sharepoint.onPrem.http.port=443}
+server: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
+trustAllServerCertificates: ${lib_Microsoft_Sharepoint.onPrem.http.trustAll=true}
+↓onPremBinaryRequest [transactions.HttpTransaction]: 
+  authenticatedContextRequired: true
+  comment: Internal POST HTTP transaction for SharePoint on-prem binary payloads sent as raw body.
+  httpInfo: true
+  httpVerb: POST
+  subDir: ${lib_Microsoft_Sharepoint.onPrem.http.defaultSubDir=/_api/web}
+  ↓__body [variables.RequestableHttpVariable-1772722495445]: 
+    comment: Temporary project-relative file path whose content is streamed as request body.
+    doFileUploadMode: multipartFormData
+    httpMethod: POST
+    httpName: __body
+  ↓__contentType [variables.RequestableHttpVariable-1772722495481]: 
+    comment: MIME type associated with the binary payload body.
+    httpMethod: POST
+    httpName: __contentType
+↓onPremGetBinaryRequest [transactions.HttpTransaction]: 
+  authenticatedContextRequired: true
+  comment: Internal GET HTTP transaction for SharePoint on-prem binary payloads encoded as base64.
+  dataEncoding: 1
+  httpInfo: true
+  subDir: ${lib_Microsoft_Sharepoint.onPrem.http.defaultSubDir=/_api/web}
+↓onPremGetRequest [transactions.HttpTransaction]: 
+  authenticatedContextRequired: true
+  comment: Internal GET HTTP transaction for SharePoint on-prem REST calls returning text/JSON payloads.
+  httpInfo: true
+  subDir: ${lib_Microsoft_Sharepoint.onPrem.http.defaultSubDir=/_api/web}
+↓onPremRequest [transactions.HttpTransaction]: 
+  authenticatedContextRequired: true
+  comment: Internal POST HTTP transaction for SharePoint on-prem REST calls with text payload template.
+  httpInfo: true
+  httpVerb: POST
+  requestTemplate: .//templates/onprem_raw_body.xsl
+  subDir: ${lib_Microsoft_Sharepoint.onPrem.http.defaultSubDir=/_api/web}
+  ↓payload [variables.RequestableHttpVariable-1772721291180]: 
+    description: Raw payload body
+    httpMethod: POST
+    httpName: payload

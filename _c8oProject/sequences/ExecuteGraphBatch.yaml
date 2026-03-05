@@ -1,10 +1,10 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Updates one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
-↓inputVars [steps.InputVariablesStep-1772620917001]: 
+comment: Executes one Microsoft Graph JSON batch request against /$batch endpoint (permissions depend on contained requests).
+↓inputVars [steps.InputVariablesStep-1772711627847]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
-↓ExecuteUpdateDriveItem [steps.SimpleStep-1772620917002]: 
-  comment: Resolves site and drive then updates one drive item.
+↓ExecuteExecuteGraphBatch [steps.SimpleStep-1772711627889]: 
+  comment: Posts batch payload to Graph and returns normalized responses and error count.
   expression: |
     'var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
@@ -117,7 +117,7 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     	return url + separator + gs_encodePathSegment(name) + "=" + gs_encodePathSegment(value);
     };
     
-    var gs_httpRequest = function(method, endpoint, bearerToken, payload, contentType, accept) {
+    var gs_httpRequest = function(method, endpoint, bearerToken, payload, contentType, accept, headers) {
     	var url = new java.net.URL(String(endpoint));
     	var connection = url.openConnection();
     	var normalizedMethod = String(method).toUpperCase();
@@ -148,6 +148,16 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     	if (patchOverride) {
     		connection.setRequestProperty("X-HTTP-Method-Override", "PATCH");
     	}
+    	if (headers !== null && headers !== undefined) {
+    		for (var headerName in headers) {
+    			if (headers.hasOwnProperty(headerName)) {
+    				var headerValue = headers[headerName];
+    				if (!gs_isBlank(headerValue)) {
+    					connection.setRequestProperty(String(headerName), String(headerValue));
+    				}
+    			}
+    		}
+    	}
     
     	if (payload !== null && payload !== undefined) {
     		connection.setDoOutput(true);
@@ -166,12 +176,16 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     	var body = gs_readAll(statusCode >= 200 && statusCode < 300 ? connection.getInputStream() : connection.getErrorStream());
     	return {
     		statusCode: statusCode,
-    		body: body
+    		body: body,
+    		location: gs_safeString(connection.getHeaderField("Location")),
+    		retryAfter: gs_safeString(connection.getHeaderField("Retry-After")),
+    		requestId: gs_safeString(connection.getHeaderField("request-id")),
+    		clientRequestId: gs_safeString(connection.getHeaderField("client-request-id"))
     	};
     };
     
     var gs_graphGetJson = function(endpoint, token) {
-    	var result = gs_httpRequest("GET", endpoint, token, null, "", "application/json");
+    	var result = gs_httpRequest("GET", endpoint, token, null, "", "application/json", null);
     	if (result.statusCode < 200 || result.statusCode >= 300) {
     		throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
     	}
@@ -181,31 +195,20 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     	return JSON.parse(result.body);
     };
     
-    var gs_graphPatchJson = function(endpoint, token, payloadObject) {
-    	var payloadString = JSON.stringify(payloadObject);
-    	var requestBuilder = java.net.http.HttpRequest.newBuilder(java.net.URI.create(String(endpoint)));
-    	requestBuilder.header("Accept", "application/json");
-    	requestBuilder.header("Content-Type", "application/json");
-    	if (!gs_isBlank(token)) {
-    		requestBuilder.header("Authorization", "Bearer " + String(token));
+    var gs_graphPostJson = function(endpoint, token, payloadObject, headers) {
+    	var payload = payloadObject === null || payloadObject === undefined ? "{}" : JSON.stringify(payloadObject);
+    	var result = gs_httpRequest("POST", endpoint, token, payload, "application/json", "application/json", headers);
+    	if (result.statusCode < 200 || result.statusCode >= 300) {
+    		throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
     	}
-    	requestBuilder.method("PATCH", java.net.http.HttpRequest.BodyPublishers.ofString(payloadString));
-    
-    	var response = java.net.http.HttpClient
-    		.newBuilder()
-    		.followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
-    		.build()
-    		.send(requestBuilder.build(), java.net.http.HttpResponse.BodyHandlers.ofString());
-    
-    	var statusCode = response.statusCode();
-    	var body = gs_safeString(response.body());
-    	if (statusCode < 200 || statusCode >= 300) {
-    		throw new java.lang.RuntimeException("Graph patch failed (" + statusCode + "): " + body);
-    	}
-    	if (gs_isBlank(body)) {
+    	if (gs_isBlank(result.body)) {
     		return {};
     	}
-    	return JSON.parse(body);
+    	return JSON.parse(result.body);
+    };
+    
+    var gs_graphDelete = function(endpoint, token) {
+    	return gs_httpRequest("DELETE", endpoint, token, null, "", "application/json", null);
     };
     
     var gs_acquireAppToken = function(tenantIdValue, clientIdValue, clientSecretValue, scopeValue) {
@@ -216,7 +219,7 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     		"&scope=" + gs_urlEncode(gs_defaultString(scopeValue, "https://graph.microsoft.com/.default")) +
     		"&grant_type=client_credentials";
     
-    	var tokenResponse = gs_httpRequest("POST", endpoint, "", payload, "application/x-www-form-urlencoded", "application/json");
+    	var tokenResponse = gs_httpRequest("POST", endpoint, "", payload, "application/x-www-form-urlencoded", "application/json", null);
     	if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
     		throw new java.lang.RuntimeException("Token endpoint failed (" + tokenResponse.statusCode + "): " + tokenResponse.body);
     	}
@@ -311,49 +314,6 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     	return parsed;
     };
     
-    var gs_normalizeDrive = function(driveObject) {
-    	if (driveObject === null || driveObject === undefined) {
-    		return {};
-    	}
-    	return {
-    		driveId: gs_safeString(driveObject.id),
-    		driveName: gs_safeString(driveObject.name),
-    		driveWebUrl: gs_safeString(driveObject.webUrl),
-    		driveType: gs_safeString(driveObject.driveType),
-    		createdDateTime: gs_safeString(driveObject.createdDateTime),
-    		lastModifiedDateTime: gs_safeString(driveObject.lastModifiedDateTime),
-    		sharepointIds: driveObject.sharepointIds === undefined || driveObject.sharepointIds === null ? {} : driveObject.sharepointIds,
-    		quota: driveObject.quota === undefined || driveObject.quota === null ? {} : driveObject.quota,
-    		owner: driveObject.owner === undefined || driveObject.owner === null ? {} : driveObject.owner
-    	};
-    };
-    
-    var gs_normalizeDriveItem = function(itemObject, includeRaw) {
-    	var mapped = {
-    		itemId: gs_safeString(itemObject.id),
-    		name: gs_safeString(itemObject.name),
-    		webUrl: gs_safeString(itemObject.webUrl),
-    		size: itemObject.size === undefined || itemObject.size === null ? 0 : itemObject.size,
-    		eTag: gs_safeString(itemObject.eTag),
-    		cTag: gs_safeString(itemObject.cTag),
-    		createdDateTime: gs_safeString(itemObject.createdDateTime),
-    		lastModifiedDateTime: gs_safeString(itemObject.lastModifiedDateTime),
-    		file: itemObject.file === undefined || itemObject.file === null ? {} : itemObject.file,
-    		folder: itemObject.folder === undefined || itemObject.folder === null ? {} : itemObject.folder,
-    		image: itemObject.image === undefined || itemObject.image === null ? {} : itemObject.image,
-    		shared: itemObject.shared === undefined || itemObject.shared === null ? {} : itemObject.shared,
-    		parentReference: itemObject.parentReference === undefined || itemObject.parentReference === null ? {} : itemObject.parentReference,
-    		createdBy: itemObject.createdBy === undefined || itemObject.createdBy === null ? {} : itemObject.createdBy,
-    		lastModifiedBy: itemObject.lastModifiedBy === undefined || itemObject.lastModifiedBy === null ? {} : itemObject.lastModifiedBy,
-    		fileSystemInfo: itemObject.fileSystemInfo === undefined || itemObject.fileSystemInfo === null ? {} : itemObject.fileSystemInfo,
-    		sharepointIds: itemObject.sharepointIds === undefined || itemObject.sharepointIds === null ? {} : itemObject.sharepointIds
-    	};
-    	if (includeRaw) {
-    		mapped.raw = itemObject;
-    	}
-    	return mapped;
-    };
-    
     var gs_resolveSite = function(token, siteIdValue, siteHostnameValue, sitePathValue) {
     	var resolvedSiteId = gs_safeString(siteIdValue);
     	var resolvedSiteHostname = "";
@@ -383,7 +343,7 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     	var resolvedListId = gs_safeString(listIdValue);
     	var requestedListName = gs_safeString(listNameValue);
     	if (gs_isBlank(resolvedListId) && gs_isBlank(requestedListName)) {
-    		throw new java.lang.IllegalArgumentException("Provide listId or listName when resolving drive from list");
+    		throw new java.lang.IllegalArgumentException("Provide listId or listName");
     	}
     
     	var listObject = null;
@@ -398,7 +358,7 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
     			"/lists?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
     		var lookup = gs_odataEscapeString(requestedListName);
-    		queryEndpoint = gs_appendQueryParam(queryEndpoint, "$filter", "displayName eq ''" + lookup + "''");
+    		queryEndpoint = gs_appendQueryParam(queryEndpoint, "$filter", "displayName eq ''" + lookup + "'' or name eq ''" + lookup + "''");
     		var queryObject = gs_graphGetJson(queryEndpoint, token);
     		if (!(queryObject.value instanceof Array) || queryObject.value.length === 0) {
     			throw new java.lang.RuntimeException("List not found: " + requestedListName);
@@ -430,7 +390,7 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     	var i;
     	for (i = 0; i < drivesResponse.value.length; i++) {
     		if (gs_safeString(drivesResponse.value[i].name).toLowerCase() === wantedName) {
-    			return gs_normalizeDrive(drivesResponse.value[i]);
+    			return drivesResponse.value[i];
     		}
     	}
     	throw new java.lang.RuntimeException("Drive not found: " + driveNameValue);
@@ -454,14 +414,14 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(siteObject.siteId) +
     			"/drives/" + gs_encodePathSegment(explicitDriveId) +
     			"?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
-    		resolvedDrive = gs_normalizeDrive(gs_graphGetJson(byIdEndpoint, token));
+    		resolvedDrive = gs_graphGetJson(byIdEndpoint, token);
     	} else if (!gs_isBlank(explicitListId) || !gs_isBlank(requestedListName)) {
     		resolvedList = gs_resolveList(token, siteObject.siteId, explicitListId, requestedListName);
     		var byListEndpoint =
     			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(siteObject.siteId) +
     			"/lists/" + gs_encodePathSegment(resolvedList.listId) +
     			"/drive?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
-    		resolvedDrive = gs_normalizeDrive(gs_graphGetJson(byListEndpoint, token));
+    		resolvedDrive = gs_graphGetJson(byListEndpoint, token);
     	} else {
     		resolvedDrive = gs_findDriveByName(token, siteObject.siteId, requestedDriveName);
     	}
@@ -472,77 +432,48 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     	};
     };
     
-    var graphOperation = "update_drive_item";
-    var requiredPermission = "Files.ReadWrite.All|Sites.ReadWrite.All";
+    var graphOperation = "execute_graph_batch";
+    var requiredPermission = "DependsOnBatchRequests";
     var tokenMode = "delegated_or_application";
     response = null;
     
     try {
-    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
-    	tokenMode = tokenInfo.mode;
+    var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    tokenMode = tokenInfo.mode;
     
-    	var targetItemId = gs_require("itemId", itemId);
-    	if (String(targetItemId).toLowerCase() === "root") {
-    		throw new java.lang.IllegalArgumentException("Updating drive root is not allowed. Provide a child item id.");
+    var batchRequest = gs_parseJsonObject("batchJson", batchJson);
+    if (!(batchRequest.requests instanceof Array) || batchRequest.requests.length === 0) {
+    	throw new java.lang.IllegalArgumentException("batchJson.requests must be a non-empty array");
+    }
+    
+    var includeRawFlag = gs_toBoolean(includeRawResponse, false);
+    var batchResponse = gs_graphPostJson("https://graph.microsoft.com/v1.0/$batch", tokenInfo.token, batchRequest, null);
+    var responses = batchResponse.responses instanceof Array ? batchResponse.responses : [];
+    
+    var failedCount = 0;
+    var i;
+    for (i = 0; i < responses.length; i++) {
+    	var statusCode = parseInt(String(responses[i].status), 10);
+    	if (!isNaN(statusCode) && statusCode >= 400) {
+    		failedCount++;
     	}
+    }
     
-    	var patchObject = gs_parseJsonObject("updateJson", updateJson);
-    	var includeRaw = gs_toBoolean(includeRawItem, false);
-    	var shouldReturnUpdatedItem = gs_toBoolean(returnUpdatedItem, true);
-    	var selectedFields = gs_splitCsv(selectFields);
+    var payload = {
+    	requestCount: batchRequest.requests.length,
+    	responseCount: responses.length,
+    	failedCount: failedCount,
+    	responses: responses
+    };
+    if (includeRawFlag) {
+    	payload.raw = batchResponse;
+    }
     
-    	var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
-    	var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
-    	var resolvedDrive = resolvedDriveData.drive;
-    	var resolvedList = resolvedDriveData.list;
-    
-    	var patchUrl =
-    		"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
-    		"/items/" + gs_encodePathSegment(targetItemId);
-    
-    	var updatedObject = gs_graphPatchJson(patchUrl, tokenInfo.token, patchObject);
-    	var item = gs_normalizeDriveItem(updatedObject, includeRaw);
-    
-    	if (shouldReturnUpdatedItem) {
-    		var getUrl =
-    			"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
-    			"/items/" + gs_encodePathSegment(targetItemId);
-    		if (selectedFields.length > 0) {
-    			getUrl = gs_appendQueryParam(getUrl, "$select", selectedFields.join(","));
-    		}
-    		item = gs_normalizeDriveItem(gs_graphGetJson(getUrl, tokenInfo.token), includeRaw);
-    	}
-    
-    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
-    		siteId: resolvedSite.siteId,
-    		siteHostname: resolvedSite.siteHostname,
-    		sitePath: resolvedSite.sitePath,
-    		driveId: resolvedDrive.driveId,
-    		driveName: resolvedDrive.driveName,
-    		driveWebUrl: resolvedDrive.driveWebUrl,
-    		driveType: resolvedDrive.driveType,
-    		sharepointIds: resolvedDrive.sharepointIds,
-    		quota: resolvedDrive.quota,
-    		owner: resolvedDrive.owner,
-    		resolvedFromList: resolvedList !== null,
-    		listId: resolvedList === null ? "" : resolvedList.listId,
-    		listName: resolvedList === null ? "" : resolvedList.listName,
-    		listDisplayName: resolvedList === null ? "" : resolvedList.listDisplayName,
-    		listWebUrl: resolvedList === null ? "" : resolvedList.listWebUrl,
-    		listInfo: resolvedList === null ? {} : resolvedList.listInfo,
-    		listSharepointIds: resolvedList === null ? {} : resolvedList.sharepointIds,
-    		query: {
-    			itemId: targetItemId,
-    			returnUpdatedItem: shouldReturnUpdatedItem,
-    			selectFields: selectedFields,
-    			includeRawItem: includeRaw
-    		},
-    		item: item
-    	});
+    response = gs_responseOk(graphOperation, tokenMode, requiredPermission, payload);
     } catch (e) {
     	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
     }'
-↓response [steps.JsonToXmlStep-1772620917003]: 
+↓response [steps.JsonToXmlStep-1772711627927]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
     - xmlizable: 
@@ -556,60 +487,25 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
-↓siteId [variables.RequestableVariable-1772620917004]: 
-  comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
-  description: Optional Graph site identifier
-↓siteHostname [variables.RequestableVariable-1772620917005]: 
-  comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
-  description: SharePoint Online hostname
-↓sitePath [variables.RequestableVariable-1772620917006]: 
-  comment: Site path when resolving siteId, for example /sites/engineering.
-  description: SharePoint site path
-  value: /sites/convertigo
-↓driveId [variables.RequestableVariable-1772620917007]: 
-  comment: Optional drive identifier. If provided, driveName/listId/listName are ignored.
-  description: Optional Graph drive identifier
-↓driveName [variables.RequestableVariable-1772620917008]: 
-  comment: Drive name used to resolve driveId when driveId is not provided.
-  description: SharePoint drive name
-↓listId [variables.RequestableVariable-1772620917009]: 
-  comment: Optional list identifier used to resolve associated drive.
-  description: Optional Graph list identifier
-↓listName [variables.RequestableVariable-1772620917010]: 
-  comment: List display name or internal name used to resolve associated drive.
-  description: SharePoint list name
-↓itemId [variables.RequestableVariable-1772620917011]: 
-  comment: Target drive item identifier to update.
-  description: Target drive item id
-  required: true
-↓updateJson [variables.RequestableVariable-1772620917012]: 
-  comment: JSON object payload used to update drive item metadata (for example name or parentReference).
-  description: JSON object for drive item patch payload
-  required: true
-  value: '{}'
-↓returnUpdatedItem [variables.RequestableVariable-1772620917013]: 
-  comment: true reloads updated item with optional property selection before returning.
-  description: Return updated item details
-  value: true
-↓selectFields [variables.RequestableVariable-1772620917014]: 
-  comment: Optional comma-separated list of Graph driveItem properties to select.
-  description: Comma-separated property selection
-↓includeRawItem [variables.RequestableVariable-1772620917015]: 
-  comment: true includes raw Graph driveItem payload under response.data.item.raw.
+↓batchJson [variables.RequestableVariable-1772711627986]: 
+  comment: Graph batch payload as JSON object with requests array.
+  description: Batch request JSON payload
+↓includeRawResponse [variables.RequestableVariable-1772711628038]: 
+  comment: true includes full raw Graph batch response payload.
   description: Include raw Graph payload
   value: false
-↓accessToken [variables.RequestableVariable-1772620917016]: 
+↓accessToken [variables.RequestableVariable-1772711628101]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
-↓tenantId [variables.RequestableVariable-1772620917017]: 
+↓tenantId [variables.RequestableVariable-1772711628172]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
   value: ${Microsoft_AzGraph.tenantId}
-↓clientId [variables.RequestableVariable-1772620917018]: 
+↓clientId [variables.RequestableVariable-1772711628248]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
   value: ${Microsoft_AzGraph.clientId}
-↓clientSecret [variables.RequestableVariable-1772620917019]: 
+↓clientSecret [variables.RequestableVariable-1772711628331]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
   value: 
@@ -617,12 +513,7 @@ comment: Updates one SharePoint Online drive item through Microsoft Graph. (Grap
     - ↑traceable: false
     - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
   visibility: '-1'
-↓TC_UpdateDriveItem [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772620917020]: 
-    value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772620917021]: 
-    value: /sites/test1
-  ↓driveName [variables.TestCaseVariable-1772620917022]: 
-    value: Documents
-  ↓itemId [variables.TestCaseVariable-1772620917023]: 
-    value: 01PETTHVHBULYXIKX2EZFIAFNZVAYMGFUP
+↓TC_ExecuteGraphBatch [core.TestCase]: 
+  ↓batchJson [variables.TestCaseVariable-1772711629106]: 
+  ↓includeRawResponse [variables.TestCaseVariable-1772711629138]: 
+    value: false

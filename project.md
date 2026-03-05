@@ -1,10 +1,110 @@
 
 # ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/core/images/project_color_16x16.png?raw=true "Project") lib_Microsoft_Sharepoint
 
-SharePoint Online connector for Convertigo.
-Uses Microsoft Graph to resolve sites, lists and drives, then perform read/write/share operations on SharePoint Online content.
+SharePoint connector for Convertigo (Online + On-Prem).
+Online mode uses Microsoft Graph for site/list/drive operations.
+On-prem mode exposes SharePoint REST APIs for site/list/file operations with digest-based writes.
 
 <details><summary><span style="color:DarkGoldenRod"><i>Connectors</i></span></summary><blockquote><p>
+
+
+<details><summary><b>sharepointOnPremHttp</b> : Internal HTTP connector scaffold for SharePoint on-prem requests</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/connectors/images/httpconnector_color_16x16.png?raw=true "HttpConnector") sharepointOnPremHttp
+
+Internal HTTP connector scaffold for SharePoint on-prem requests.
+
+<details><summary><span style="color:DarkGoldenRod"><i>Transactions</i></span></summary><blockquote><p>
+
+
+<details><summary><b>onPremBinaryRequest</b> : Internal POST HTTP transaction for SharePoint on-prem binary payloads sent as raw body</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/httptransaction_color_16x16.png?raw=true "HttpTransaction") onPremBinaryRequest
+
+Internal POST HTTP transaction for SharePoint on-prem binary payloads sent as raw body.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__body
+</td>
+<td>
+Temporary project-relative file path whose content is streamed as request body.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;__contentType
+</td>
+<td>
+MIME type associated with the binary payload body.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>onPremGetBinaryRequest</b> : Internal GET HTTP transaction for SharePoint on-prem binary payloads encoded as base64</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/httptransaction_color_16x16.png?raw=true "HttpTransaction") onPremGetBinaryRequest
+
+Internal GET HTTP transaction for SharePoint on-prem binary payloads encoded as base64.
+</p></blockquote></details>
+
+<details><summary><b>onPremGetRequest</b> : Internal GET HTTP transaction for SharePoint on-prem REST calls returning text/JSON payloads</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/httptransaction_color_16x16.png?raw=true "HttpTransaction") onPremGetRequest
+
+Internal GET HTTP transaction for SharePoint on-prem REST calls returning text/JSON payloads.
+</p></blockquote></details>
+
+<details><summary><b>onPremRequest</b> : Internal POST HTTP transaction for SharePoint on-prem REST calls with text payload template</summary><blockquote><p>
+
+
+### ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/transactions/images/httptransaction_color_16x16.png?raw=true "HttpTransaction") onPremRequest
+
+Internal POST HTTP transaction for SharePoint on-prem REST calls with text payload template.
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableHttpVariable" >&nbsp;payload
+</td>
+<td>
+
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+</p></blockquote></details>
+</p></blockquote></details>
+
+<details><summary><b>void</b> : void connector, replace or don't use it</summary><blockquote><p>
 
 
 ## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/connectors/images/sqlconnector_color_16x16.png?raw=true "SqlConnector") void
@@ -19,6 +119,7 @@ void connector, replace or don't use it
 does nothing
 </p></blockquote></details>
 </p></blockquote></details>
+</p></blockquote></details>
 
 <details><summary><span style="color:DarkGoldenRod"><i>Sequences</i></span></summary><blockquote><p>
 
@@ -31,10 +132,10 @@ does nothing
 Builds a flat JAR for Microsoft Graph Java SDK and stores it under .//libs (no Microsoft Graph permission required)
 </p></blockquote></details>
 
-<details><summary><b>CopyDriveItem</b> : Starts one SharePoint Online drive item copy operation through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>CopyItem</b> : Starts one SharePoint Online drive item copy operation through Microsoft Graph</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") CopyDriveItem
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") CopyItem
 
 Starts one SharePoint Online drive item copy operation through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
@@ -173,10 +274,10 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>CreateDriveFolder</b> : Creates one SharePoint Online drive folder through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>CreateFolder</b> : Creates one SharePoint Online drive folder through Microsoft Graph</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") CreateDriveFolder
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") CreateFolder
 
 Creates one SharePoint Online drive folder through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
@@ -331,12 +432,320 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>CreateDriveItemShareLink</b> : Creates one SharePoint Online drive item sharing link through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>CreateGraphSubscription</b> : Creates a Microsoft Graph webhook subscription (resource-dependent permissions)</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") CreateDriveItemShareLink
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") CreateGraphSubscription
 
-Creates one SharePoint Online drive item sharing link through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Creates a Microsoft Graph webhook subscription (resource-dependent permissions).
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;changeType
+</td>
+<td>
+Change type list, for example created,updated,deleted.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientState
+</td>
+<td>
+Optional shared secret returned by Graph in notifications.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;encryptionCertificate
+</td>
+<td>
+Base64-encoded X.509 certificate public key used when includeResourceData=true.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;encryptionCertificateId
+</td>
+<td>
+Client-generated certificate id used when includeResourceData=true.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;expirationDateTime
+</td>
+<td>
+Subscription expiration in UTC ISO-8601 format.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeResourceData
+</td>
+<td>
+true enables encrypted resource data notifications (requires certificate inputs).
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;latestSupportedTlsVersion
+</td>
+<td>
+Optional TLS version hint, for example v1_2.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;notificationUrl
+</td>
+<td>
+HTTPS endpoint receiving Graph validation and notifications.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;resource
+</td>
+<td>
+Graph resource to monitor, for example /sites/{site-id}/lists/{list-id}/items.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>CreateListItem</b> : Creates one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem)</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") CreateListItem
+
+Creates one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.ReadWrite.All)
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;contentTypeId
+</td>
+<td>
+Optional SharePoint content type id sent in payload.contentType.id.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;cookieHeader
+</td>
+<td>
+Optional Cookie header for on-prem forms authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;fieldsJson
+</td>
+<td>
+JSON object payload used as Graph fields map for list item creation.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeRawItem
+</td>
+<td>
+true includes raw Graph payload under item.raw.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listId
+</td>
+<td>
+Optional list identifier. If provided, listName is ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listName
+</td>
+<td>
+List display name or internal name used to resolve listId.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremPassword
+</td>
+<td>
+Optional technical password for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremProtocol
+</td>
+<td>
+URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremUsername
+</td>
+<td>
+Optional technical username for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;returnCreatedItem
+</td>
+<td>
+true reloads the created item with optional field projection before returning.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;selectFields
+</td>
+<td>
+Optional comma-separated list of field internal names projected in returned item.fields.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteBaseUrl
+</td>
+<td>
+Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
+</td>
+<td>
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteId
+</td>
+<td>
+Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sitePath
+</td>
+<td>
+Site path when resolving siteId, for example /sites/engineering.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>CreateShareLink</b> : Creates one SharePoint drive item sharing link through Microsoft Graph (online), with graceful fallback when unsupported on-prem</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") CreateShareLink
+
+Creates one SharePoint drive item sharing link through Microsoft Graph (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -447,6 +856,14 @@ Optional password used when scope/type supports it.
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;retainInheritedPermissions
 </td>
 <td>
@@ -466,7 +883,7 @@ Sharing link scope (anonymous, organization, users).
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
 </td>
 <td>
-SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
 </td>
 </tr>
 <tr>
@@ -497,12 +914,12 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>CreateListItem</b> : Creates a SharePoint Online list item through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>DeleteGraphSubscription</b> : Deletes one Microsoft Graph webhook subscription (resource-dependent permissions)</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") CreateListItem
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") DeleteGraphSubscription
 
-Creates a SharePoint Online list item through Microsoft Graph. (Graph permissions Sites.ReadWrite.All)
+Deletes one Microsoft Graph webhook subscription (resource-dependent permissions).
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -541,82 +958,10 @@ Azure Entra application client secret used for app-only token acquisition.
 </tr>
 <tr>
 <td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;contentTypeId
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;subscriptionId
 </td>
 <td>
-Optional SharePoint content type id sent in payload.contentType.id.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;fieldsJson
-</td>
-<td>
-JSON object payload used as Graph fields map for list item creation.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeRawItem
-</td>
-<td>
-true includes raw Graph payload under item.raw.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listId
-</td>
-<td>
-Optional list identifier. If provided, listName is ignored.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listName
-</td>
-<td>
-List display name or internal name used to resolve listId.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;returnCreatedItem
-</td>
-<td>
-true reloads the created item with optional field projection before returning.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;selectFields
-</td>
-<td>
-Optional comma-separated list of field internal names projected in returned item.fields.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
-</td>
-<td>
-SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteId
-</td>
-<td>
-Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sitePath
-</td>
-<td>
-Site path when resolving siteId, for example /sites/engineering.
+Subscription identifier returned by CreateGraphSubscription.
 </td>
 </tr>
 <tr>
@@ -631,10 +976,10 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>DeleteDriveItem</b> : Deletes one SharePoint Online drive item through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>DeleteItem</b> : Deletes one SharePoint Online drive item through Microsoft Graph</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") DeleteDriveItem
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") DeleteItem
 
 Deletes one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
@@ -773,12 +1118,12 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>DeleteDriveItemPermission</b> : Deletes one SharePoint Online drive item permission through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>DeleteItemPermission</b> : Deletes one SharePoint drive item permission through Microsoft Graph (online), with graceful fallback when unsupported on-prem</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") DeleteDriveItemPermission
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") DeleteItemPermission
 
-Deletes one SharePoint Online drive item permission through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Deletes one SharePoint drive item permission through Microsoft Graph (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -881,10 +1226,18 @@ Target permission identifier to delete.
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
 </td>
 <td>
-SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
 </td>
 </tr>
 <tr>
@@ -915,12 +1268,12 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>DeleteListItem</b> : Deletes one SharePoint Online list item through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>DeleteListItem</b> : Deletes one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem)</summary><blockquote><p>
 
 
 ## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") DeleteListItem
 
-Deletes one SharePoint Online list item through Microsoft Graph. (Graph permissions Sites.ReadWrite.All)
+Deletes one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.ReadWrite.All)
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -955,6 +1308,14 @@ Azure Entra application client id used for app-only token acquisition.
 </td>
 <td>
 Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;cookieHeader
+</td>
+<td>
+Optional Cookie header for on-prem forms authentication.
 </td>
 </tr>
 <tr>
@@ -999,6 +1360,38 @@ List display name or internal name used to resolve listId.
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremPassword
+</td>
+<td>
+Optional technical password for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremProtocol
+</td>
+<td>
+URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremUsername
+</td>
+<td>
+Optional technical username for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;selectFields
 </td>
 <td>
@@ -1007,10 +1400,18 @@ Optional comma-separated list of field internal names projected in returned snap
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteBaseUrl
+</td>
+<td>
+Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
 </td>
 <td>
-SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
 </td>
 </tr>
 <tr>
@@ -1041,10 +1442,10 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>DownloadDriveItemContent</b> : Downloads one SharePoint Online drive file content through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>DownloadItemContent</b> : Downloads one SharePoint Online drive file content through Microsoft Graph</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") DownloadDriveItemContent
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") DownloadItemContent
 
 Downloads one SharePoint Online drive file content through Microsoft Graph. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
 
@@ -1183,10 +1584,212 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>GetDriveItem</b> : Retrieves one SharePoint Online drive item through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>ExecuteGraphBatch</b> : Executes one Microsoft Graph JSON batch request against /$batch endpoint (permissions depend on contained requests)</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") GetDriveItem
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ExecuteGraphBatch
+
+Executes one Microsoft Graph JSON batch request against /$batch endpoint (permissions depend on contained requests).
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;batchJson
+</td>
+<td>
+Graph batch payload as JSON object with requests array.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeRawResponse
+</td>
+<td>
+true includes full raw Graph batch response payload.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>GetCopyItemOperation</b> : Reads status of one asynchronous copy/move monitor URL returned by Microsoft Graph</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") GetCopyItemOperation
+
+Reads status of one asynchronous copy/move monitor URL returned by Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeMonitorBody
+</td>
+<td>
+true includes parsed monitor response body when present.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;monitorUrl
+</td>
+<td>
+Operation monitor URL returned by CopyDriveItem, usually from data.copyRequest.monitorUrl.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>GetGraphAccessToken</b> : Resolves a delegated or app-only Microsoft Graph access token for SharePoint Online operations</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") GetGraphAccessToken
+
+Resolves a delegated or app-only Microsoft Graph access token for SharePoint Online operations. (Graph permissions for downstream calls Sites.Read.All|Sites.ReadWrite.All)
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeTokenPayload
+</td>
+<td>
+true decodes token payload claims for troubleshooting.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>GetItem</b> : Retrieves one SharePoint Online drive item through Microsoft Graph</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") GetItem
 
 Retrieves one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
 
@@ -1317,74 +1920,12 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>GetGraphAccessToken</b> : Resolves a delegated or app-only Microsoft Graph access token for SharePoint Online operations</summary><blockquote><p>
-
-
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") GetGraphAccessToken
-
-Resolves a delegated or app-only Microsoft Graph access token for SharePoint Online operations. (Graph permissions for downstream calls Sites.Read.All|Sites.ReadWrite.All)
-
-<span style="color:DarkGoldenRod">Variables</span>
-
-<table>
-<tr>
-<th>
-name
-</th>
-<th>
-comment
-</th>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
-</td>
-<td>
-Optional delegated bearer token. If provided, tenant/client/secret are ignored.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
-</td>
-<td>
-Azure Entra application client id used for app-only token acquisition.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
-</td>
-<td>
-Azure Entra application client secret used for app-only token acquisition.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeTokenPayload
-</td>
-<td>
-true decodes token payload claims for troubleshooting.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
-</td>
-<td>
-Azure Entra tenant id used for app-only token acquisition.
-</td>
-</tr>
-</table>
-
-</p></blockquote></details>
-
-<details><summary><b>GetListItem</b> : Retrieves one SharePoint Online list item through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>GetListItem</b> : Retrieves one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem)</summary><blockquote><p>
 
 
 ## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") GetListItem
 
-Retrieves one SharePoint Online list item through Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+Retrieves one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -1419,6 +1960,14 @@ Azure Entra application client id used for app-only token acquisition.
 </td>
 <td>
 Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;cookieHeader
+</td>
+<td>
+Optional Cookie header for on-prem forms authentication.
 </td>
 </tr>
 <tr>
@@ -1455,6 +2004,38 @@ List display name or internal name used to resolve listId.
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremPassword
+</td>
+<td>
+Optional technical password for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremProtocol
+</td>
+<td>
+URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremUsername
+</td>
+<td>
+Optional technical username for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;selectFields
 </td>
 <td>
@@ -1463,10 +2044,18 @@ Optional comma-separated list of field internal names projected in fields object
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteBaseUrl
+</td>
+<td>
+Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
 </td>
 <td>
-SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
 </td>
 </tr>
 <tr>
@@ -1497,12 +2086,12 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>InviteDriveItemRecipients</b> : Invites recipients to one SharePoint Online drive item through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>InviteItemRecipients</b> : Invites recipients to one SharePoint drive item through Microsoft Graph (online), with graceful fallback when unsupported on-prem</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") InviteDriveItemRecipients
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") InviteItemRecipients
 
-Invites recipients to one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Invites recipients to one SharePoint drive item through Microsoft Graph (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -1605,6 +2194,14 @@ Optional invitation message sent by Graph.
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;recipientEmails
 </td>
 <td>
@@ -1656,7 +2253,7 @@ true asks Graph to send email invitations.
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
 </td>
 <td>
-SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
 </td>
 </tr>
 <tr>
@@ -1687,12 +2284,360 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>ListDriveItemPermissions</b> : Lists permissions of one SharePoint Online drive item through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>ListGetItems</b> : Lists SharePoint list items through Microsoft Graph (online) or SharePoint REST (on-prem), with filtering/pagination/projection</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListDriveItemPermissions
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListGetItems
 
-Lists permissions of one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
+Lists SharePoint list items through Microsoft Graph (online) or SharePoint REST (on-prem), with filtering/pagination/projection. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;cookieHeader
+</td>
+<td>
+Optional Cookie header for on-prem forms authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;expandFields
+</td>
+<td>
+true includes fields expansion in Graph query.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;filter
+</td>
+<td>
+Optional OData filter expression.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeRawItem
+</td>
+<td>
+true includes raw Graph item payload under each result item.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listId
+</td>
+<td>
+Optional list identifier. If provided, listName is ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listName
+</td>
+<td>
+List display name or internal name used to resolve listId.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;maxPages
+</td>
+<td>
+Maximum number of Graph pages fetched before stopping pagination.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremPassword
+</td>
+<td>
+Optional technical password for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremProtocol
+</td>
+<td>
+URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremUsername
+</td>
+<td>
+Optional technical username for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;orderBy
+</td>
+<td>
+Optional OData order by expression.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;selectFields
+</td>
+<td>
+Optional comma-separated list of field internal names projected in fields object.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteBaseUrl
+</td>
+<td>
+Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
+</td>
+<td>
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteId
+</td>
+<td>
+Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sitePath
+</td>
+<td>
+Site path when resolving siteId, for example /sites/engineering.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;top
+</td>
+<td>
+Maximum number of items requested per Graph page.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>ListGetItemsDelta</b> : Lists list item changes through Microsoft Graph delta API</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListGetItemsDelta
+
+Lists list item changes through Microsoft Graph delta API. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;deltaLink
+</td>
+<td>
+Optional full @odata.deltaLink from previous call. If provided, other query parameters are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;deltaToken
+</td>
+<td>
+Optional delta token returned by previous call.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;expandFields
+</td>
+<td>
+true appends $expand=fields to include columns payload in each item.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeRawItem
+</td>
+<td>
+true includes raw Graph listItem payload under each result item.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listId
+</td>
+<td>
+Optional list identifier. If provided, listName is ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listName
+</td>
+<td>
+List display name or internal name used to resolve listId.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;maxPages
+</td>
+<td>
+Maximum number of pages fetched before stopping pagination.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;selectFields
+</td>
+<td>
+Optional comma-separated list of Graph listItem properties to select.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
+</td>
+<td>
+SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteId
+</td>
+<td>
+Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sitePath
+</td>
+<td>
+Site path when resolving siteId, for example /sites/engineering.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;top
+</td>
+<td>
+Maximum number of items requested per Graph page.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>ListItemPermissions</b> : Lists permissions of one SharePoint drive item through Microsoft Graph (online), with graceful fallback when unsupported on-prem</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListItemPermissions
+
+Lists permissions of one SharePoint drive item through Microsoft Graph (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -1787,6 +2732,14 @@ Maximum number of Graph pages fetched before stopping pagination.
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;selectFields
 </td>
 <td>
@@ -1798,7 +2751,7 @@ Optional comma-separated list of Graph permission properties to select.
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
 </td>
 <td>
-SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
 </td>
 </tr>
 <tr>
@@ -1837,10 +2790,10 @@ Maximum number of permissions requested per Graph page.
 
 </p></blockquote></details>
 
-<details><summary><b>ListDriveItems</b> : Lists SharePoint Online drive items through Microsoft Graph with pagination and projection</summary><blockquote><p>
+<details><summary><b>ListItems</b> : Lists SharePoint Online drive items through Microsoft Graph with pagination and projection</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListDriveItems
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListItems
 
 Lists SharePoint Online drive items through Microsoft Graph with pagination and projection. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
 
@@ -2003,12 +2956,12 @@ Maximum number of items requested per Graph page.
 
 </p></blockquote></details>
 
-<details><summary><b>ListGetItems</b> : Lists SharePoint Online list items through Microsoft Graph with OData pagination and field projection</summary><blockquote><p>
+<details><summary><b>ListItemsDelta</b> : Lists drive item changes through Microsoft Graph delta API</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListGetItems
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListItemsDelta
 
-Lists SharePoint Online list items through Microsoft Graph with OData pagination and field projection. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+Lists drive item changes through Microsoft Graph delta API. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -2047,18 +3000,34 @@ Azure Entra application client secret used for app-only token acquisition.
 </tr>
 <tr>
 <td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;expandFields
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;deltaLink
 </td>
 <td>
-true includes fields expansion in Graph query.
+Optional full @odata.deltaLink from previous call. If provided, other query parameters are ignored.
 </td>
 </tr>
 <tr>
 <td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;filter
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;deltaToken
 </td>
 <td>
-Optional OData filter expression.
+Optional delta token returned by previous call.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;driveId
+</td>
+<td>
+Optional drive identifier. If provided, driveName/listId/listName are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;driveName
+</td>
+<td>
+Drive name used to resolve driveId when driveId is not provided.
 </td>
 </tr>
 <tr>
@@ -2066,7 +3035,7 @@ Optional OData filter expression.
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeRawItem
 </td>
 <td>
-true includes raw Graph item payload under each result item.
+true includes raw Graph driveItem payload under each result item.
 </td>
 </tr>
 <tr>
@@ -2074,7 +3043,7 @@ true includes raw Graph item payload under each result item.
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listId
 </td>
 <td>
-Optional list identifier. If provided, listName is ignored.
+Optional list identifier used to resolve associated drive.
 </td>
 </tr>
 <tr>
@@ -2082,7 +3051,7 @@ Optional list identifier. If provided, listName is ignored.
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listName
 </td>
 <td>
-List display name or internal name used to resolve listId.
+List display name or internal name used to resolve associated drive.
 </td>
 </tr>
 <tr>
@@ -2090,15 +3059,15 @@ List display name or internal name used to resolve listId.
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;maxPages
 </td>
 <td>
-Maximum number of Graph pages fetched before stopping pagination.
+Maximum number of pages fetched before stopping pagination.
 </td>
 </tr>
 <tr>
 <td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;orderBy
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;parentItemId
 </td>
 <td>
-Optional OData order by expression.
+Parent drive item id for scoped delta. Use root for drive root.
 </td>
 </tr>
 <tr>
@@ -2106,7 +3075,7 @@ Optional OData order by expression.
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;selectFields
 </td>
 <td>
-Optional comma-separated list of field internal names projected in fields object.
+Optional comma-separated list of Graph driveItem properties to select.
 </td>
 </tr>
 <tr>
@@ -2153,10 +3122,492 @@ Maximum number of items requested per Graph page.
 
 </p></blockquote></details>
 
-<details><summary><b>MoveDriveItem</b> : Moves or renames one SharePoint Online drive item through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>ListItemVersions</b> : Lists versions of one drive item through Microsoft Graph with pagination</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") MoveDriveItem
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListItemVersions
+
+Lists versions of one drive item through Microsoft Graph with pagination. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;driveId
+</td>
+<td>
+Optional drive identifier. If provided, driveName/listId/listName are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;driveName
+</td>
+<td>
+Drive name used to resolve driveId when driveId is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeRawVersion
+</td>
+<td>
+true includes raw Graph driveItemVersion payload under each result item.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;itemId
+</td>
+<td>
+Drive item identifier to inspect version history.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listId
+</td>
+<td>
+Optional list identifier used to resolve associated drive.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listName
+</td>
+<td>
+List display name or internal name used to resolve associated drive.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;maxPages
+</td>
+<td>
+Maximum number of pages fetched before stopping pagination.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
+</td>
+<td>
+SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteId
+</td>
+<td>
+Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sitePath
+</td>
+<td>
+Site path when resolving siteId, for example /sites/engineering.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;top
+</td>
+<td>
+Maximum number of versions requested per Graph page.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>ListSiteDrives</b> : Lists SharePoint site drives through Microsoft Graph (online) or SharePoint REST (on-prem)</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListSiteDrives
+
+Lists SharePoint site drives through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;cookieHeader
+</td>
+<td>
+Optional Cookie header for on-prem forms authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeRawDrive
+</td>
+<td>
+true includes raw Graph drive payload under each result item.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;maxPages
+</td>
+<td>
+Maximum number of pages fetched before stopping pagination.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremPassword
+</td>
+<td>
+Optional technical password for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremProtocol
+</td>
+<td>
+URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremUsername
+</td>
+<td>
+Optional technical username for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;selectFields
+</td>
+<td>
+Optional comma-separated list properties to select.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteBaseUrl
+</td>
+<td>
+Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
+</td>
+<td>
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteId
+</td>
+<td>
+Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sitePath
+</td>
+<td>
+Site path when resolving siteId, for example /sites/engineering.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;top
+</td>
+<td>
+Maximum number of drives requested per Graph page.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>ListSiteLists</b> : Lists SharePoint site lists through Microsoft Graph (online) or SharePoint REST (on-prem)</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ListSiteLists
+
+Lists SharePoint site lists through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;cookieHeader
+</td>
+<td>
+Optional Cookie header for on-prem forms authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;filter
+</td>
+<td>
+Optional OData filter expression.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeRawList
+</td>
+<td>
+true includes raw Graph list payload under each result item.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;maxPages
+</td>
+<td>
+Maximum number of pages fetched before stopping pagination.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremPassword
+</td>
+<td>
+Optional technical password for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremProtocol
+</td>
+<td>
+URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremUsername
+</td>
+<td>
+Optional technical username for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;orderBy
+</td>
+<td>
+Optional OData order by expression.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;search
+</td>
+<td>
+Optional OData search term.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;selectFields
+</td>
+<td>
+Optional comma-separated list properties to select.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteBaseUrl
+</td>
+<td>
+Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
+</td>
+<td>
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteId
+</td>
+<td>
+Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sitePath
+</td>
+<td>
+Site path when resolving siteId, for example /sites/engineering.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;top
+</td>
+<td>
+Maximum number of lists requested per Graph page.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>MoveItem</b> : Moves or renames one SharePoint Online drive item through Microsoft Graph</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") MoveItem
 
 Moves or renames one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
@@ -2319,10 +3770,10 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>ResolveDrive</b> : Resolves a SharePoint Online drive by site and drive identifiers using Microsoft Graph</summary><blockquote><p>
+<details><summary><b>ResolveLibrary</b> : Resolves a SharePoint Online drive by site and drive identifiers using Microsoft Graph</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ResolveDrive
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ResolveLibrary
 
 Resolves a SharePoint Online drive by site and drive identifiers using Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All|Files.Read.All|Files.ReadWrite.All)
 
@@ -2429,12 +3880,12 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>ResolveList</b> : Resolves a SharePoint Online list by site and list name using Microsoft Graph</summary><blockquote><p>
+<details><summary><b>ResolveList</b> : Resolves a SharePoint list by site and list identifier/name using Microsoft Graph (online) or SharePoint REST (on-prem)</summary><blockquote><p>
 
 
 ## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ResolveList
 
-Resolves a SharePoint Online list by site and list name using Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+Resolves a SharePoint list by site and list identifier/name using Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -2473,6 +3924,14 @@ Azure Entra application client secret used for app-only token acquisition.
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;cookieHeader
+</td>
+<td>
+Optional Cookie header for on-prem forms authentication.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listId
 </td>
 <td>
@@ -2485,6 +3944,290 @@ Optional list identifier. If provided, listName is ignored.
 </td>
 <td>
 List display name or internal name used to resolve listId.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremPassword
+</td>
+<td>
+Optional technical password for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremProtocol
+</td>
+<td>
+URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremUsername
+</td>
+<td>
+Optional technical username for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteBaseUrl
+</td>
+<td>
+Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
+</td>
+<td>
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteId
+</td>
+<td>
+Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sitePath
+</td>
+<td>
+Site path when resolving siteId, for example /sites/engineering.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>ResolveSite</b> : Resolves a SharePoint site by hostname and path using Microsoft Graph (online) or SharePoint REST (on-prem)</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ResolveSite
+
+Resolves a SharePoint site by hostname and path using Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;cookieHeader
+</td>
+<td>
+Optional Cookie header for on-prem forms authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremPassword
+</td>
+<td>
+Optional technical password for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremProtocol
+</td>
+<td>
+URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremUsername
+</td>
+<td>
+Optional technical username for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteBaseUrl
+</td>
+<td>
+Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
+</td>
+<td>
+SharePoint hostname for target site, for example contoso.sharepoint.com.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sitePath
+</td>
+<td>
+Site path under hostname, for example /sites/engineering.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
+</td>
+<td>
+Azure Entra tenant id used for app-only token acquisition.
+</td>
+</tr>
+</table>
+
+</p></blockquote></details>
+
+<details><summary><b>RestoreItemVersion</b> : Restores one historical version of a drive item through Microsoft Graph</summary><blockquote><p>
+
+
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") RestoreItemVersion
+
+Restores one historical version of a drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+
+<span style="color:DarkGoldenRod">Variables</span>
+
+<table>
+<tr>
+<th>
+name
+</th>
+<th>
+comment
+</th>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+</td>
+<td>
+Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
+</td>
+<td>
+Azure Entra application client id used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
+</td>
+<td>
+Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;driveId
+</td>
+<td>
+Optional drive identifier. If provided, driveName/listId/listName are ignored.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;driveName
+</td>
+<td>
+Drive name used to resolve driveId when driveId is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;includeItemSnapshot
+</td>
+<td>
+true fetches current item snapshot after restore operation.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;itemId
+</td>
+<td>
+Drive item identifier to restore from version history.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listId
+</td>
+<td>
+Optional list identifier used to resolve associated drive.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;listName
+</td>
+<td>
+List display name or internal name used to resolve associated drive.
 </td>
 </tr>
 <tr>
@@ -2519,84 +4262,22 @@ Site path when resolving siteId, for example /sites/engineering.
 Azure Entra tenant id used for app-only token acquisition.
 </td>
 </tr>
-</table>
-
-</p></blockquote></details>
-
-<details><summary><b>ResolveSite</b> : Resolves a SharePoint Online site by hostname and site path using Microsoft Graph</summary><blockquote><p>
-
-
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") ResolveSite
-
-Resolves a SharePoint Online site by hostname and site path using Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
-
-<span style="color:DarkGoldenRod">Variables</span>
-
-<table>
-<tr>
-<th>
-name
-</th>
-<th>
-comment
-</th>
-</tr>
 <tr>
 <td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;accessToken
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;versionId
 </td>
 <td>
-Optional delegated bearer token. If provided, tenant/client/secret are ignored.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientId
-</td>
-<td>
-Azure Entra application client id used for app-only token acquisition.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;clientSecret
-</td>
-<td>
-Azure Entra application client secret used for app-only token acquisition.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
-</td>
-<td>
-SharePoint Online hostname for target site, for example contoso.sharepoint.com.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;sitePath
-</td>
-<td>
-Site path under hostname, for example /sites/engineering.
-</td>
-</tr>
-<tr>
-<td>
-<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;tenantId
-</td>
-<td>
-Azure Entra tenant id used for app-only token acquisition.
+Version identifier returned by ListDriveItemVersions.
 </td>
 </tr>
 </table>
 
 </p></blockquote></details>
 
-<details><summary><b>UpdateDriveItem</b> : Updates one SharePoint Online drive item through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>UpdateItem</b> : Updates one SharePoint Online drive item through Microsoft Graph</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") UpdateDriveItem
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") UpdateItem
 
 Updates one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
@@ -2743,12 +4424,12 @@ JSON object payload used to update drive item metadata (for example name or pare
 
 </p></blockquote></details>
 
-<details><summary><b>UpdateListItem</b> : Updates one SharePoint Online list item through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>UpdateListItem</b> : Updates one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem)</summary><blockquote><p>
 
 
 ## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") UpdateListItem
 
-Updates one SharePoint Online list item through Microsoft Graph. (Graph permissions Sites.ReadWrite.All)
+Updates one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.ReadWrite.All)
 
 <span style="color:DarkGoldenRod">Variables</span>
 
@@ -2783,6 +4464,14 @@ Azure Entra application client id used for app-only token acquisition.
 </td>
 <td>
 Azure Entra application client secret used for app-only token acquisition.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;cookieHeader
+</td>
+<td>
+Optional Cookie header for on-prem forms authentication.
 </td>
 </tr>
 <tr>
@@ -2827,6 +4516,38 @@ List display name or internal name used to resolve listId.
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremPassword
+</td>
+<td>
+Optional technical password for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremProtocol
+</td>
+<td>
+URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;onPremUsername
+</td>
+<td>
+Optional technical username for on-prem basic authentication.
+</td>
+</tr>
+<tr>
+<td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;provider
+</td>
+<td>
+Backend provider selection graph or onprem.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;returnUpdatedItem
 </td>
 <td>
@@ -2843,10 +4564,18 @@ Optional comma-separated list of field internal names projected in returned item
 </tr>
 <tr>
 <td>
+<img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteBaseUrl
+</td>
+<td>
+Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+</td>
+</tr>
+<tr>
+<td>
 <img src="https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/variables/images/variable_color_16x16.png?raw=true "  alt="RequestableVariable" >&nbsp;siteHostname
 </td>
 <td>
-SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
+SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
 </td>
 </tr>
 <tr>
@@ -2877,10 +4606,10 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>UploadDriveItemContent</b> : Uploads one SharePoint Online drive file content through Microsoft Graph</summary><blockquote><p>
+<details><summary><b>UploadItemContent</b> : Uploads one SharePoint Online drive file content through Microsoft Graph</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") UploadDriveItemContent
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") UploadItemContent
 
 Uploads one SharePoint Online drive file content through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
@@ -3051,10 +4780,10 @@ Azure Entra tenant id used for app-only token acquisition.
 
 </p></blockquote></details>
 
-<details><summary><b>UploadDriveItemLargeContent</b> : Uploads one SharePoint Online drive file using Graph upload session and chunk transfer</summary><blockquote><p>
+<details><summary><b>UploadItemLargeContent</b> : Uploads one SharePoint Online drive file using Graph upload session and chunk transfer</summary><blockquote><p>
 
 
-## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") UploadDriveItemLargeContent
+## ![](https://github.com/convertigo/convertigo/blob/develop/engine/src/com/twinsoft/convertigo/beans/sequences/images/genericsequence_color_16x16.png?raw=true "GenericSequence") UploadItemLargeContent
 
 Uploads one SharePoint Online drive file using Graph upload session and chunk transfer. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 

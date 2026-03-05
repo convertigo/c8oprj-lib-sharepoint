@@ -1,12 +1,14 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Resolves a SharePoint Online list by site and list name using Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+comment: Resolves a SharePoint list by site and list identifier/name using Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 ↓inputVars [steps.InputVariablesStep-1772620734382]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
 ↓ExecuteResolveList [steps.SimpleStep-1772620734451]: 
-  comment: Resolves site and list identifiers through Microsoft Graph endpoints.
+  comment: Resolves site and list identifiers through Microsoft Graph (online) or SharePoint REST (on-prem).
   expression: |
-    'var gs_isBlank = function(value) {
+    'include("js/sharepoint_provider.js");
+    
+    var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
     };
     
@@ -237,74 +239,96 @@ comment: Resolves a SharePoint Online list by site and list name using Microsoft
     var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
+    var requestedProvider = sppr_normalizeProvider(provider, "graph");
     
-    try {
-    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
-    	tokenMode = tokenInfo.mode;
-    
-    	var resolvedSiteId = gs_safeString(siteId);
-    	var resolvedSiteHostname = "";
-    	var resolvedSitePath = "";
-    	if (gs_isBlank(resolvedSiteId)) {
-    		resolvedSiteHostname = gs_require("siteHostname", siteHostname).toLowerCase();
-    		resolvedSitePath = gs_normalizeSitePath(sitePath);
-    		var siteEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" +
-    			resolvedSiteHostname +
-    			":" +
-    			gs_encodeSitePath(resolvedSitePath) +
-    			"?$select=id,webUrl,name,displayName";
-    		var siteObject = gs_graphGetJson(siteEndpoint, tokenInfo.token);
-    		resolvedSiteId = gs_require("siteId", siteObject.id);
-    	} else {
-    		resolvedSiteId = String(resolvedSiteId);
+    if (requestedProvider === "onprem") {
+    	tokenMode = "onprem";
+    	try {
+    		sppr_ensureOnPremDispatch();
+    		response = sppr_onPremResolveList({
+    			siteBaseUrl: siteBaseUrl,
+    			siteHostname: siteHostname,
+    			sitePath: sitePath,
+    			onPremProtocol: onPremProtocol,
+    			listId: listId,
+    			listName: listName,
+    			accessToken: accessToken,
+    			onPremUsername: onPremUsername,
+    			onPremPassword: onPremPassword,
+    			cookieHeader: cookieHeader
+    		});
+    	} catch (onPremError) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, onPremError);
     	}
+    } else {
+    	try {
+    		var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    		tokenMode = tokenInfo.mode;
     
-    	var explicitListId = gs_safeString(listId);
-    	var requestedListName = gs_safeString(listName);
-    	if (gs_isBlank(explicitListId) && gs_isBlank(requestedListName)) {
-    		throw new java.lang.IllegalArgumentException("Provide listId or listName");
-    	}
-    
-    	var normalizedList = null;
-    	if (!gs_isBlank(explicitListId)) {
-    		var byIdEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
-    			"/lists/" + gs_encodePathSegment(explicitListId) +
-    			"?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
-    		normalizedList = gs_normalizeListEntry(gs_graphGetJson(byIdEndpoint, tokenInfo.token));
-    	} else {
-    		var queryEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
-    			"/lists?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
-    		if (!gs_isBlank(requestedListName)) {
-    			var lookup = gs_odataEscapeString(requestedListName);
-    			queryEndpoint = gs_appendQueryParam(queryEndpoint, "$filter", "displayName eq ''" + lookup + "''");
+    		var resolvedSiteId = gs_safeString(siteId);
+    		var resolvedSiteHostname = "";
+    		var resolvedSitePath = "";
+    		if (gs_isBlank(resolvedSiteId)) {
+    			resolvedSiteHostname = gs_require("siteHostname", siteHostname).toLowerCase();
+    			resolvedSitePath = gs_normalizeSitePath(sitePath);
+    			var siteEndpoint =
+    				"https://graph.microsoft.com/v1.0/sites/" +
+    				resolvedSiteHostname +
+    				":" +
+    				gs_encodeSitePath(resolvedSitePath) +
+    				"?$select=id,webUrl,name,displayName";
+    			var siteObject = gs_graphGetJson(siteEndpoint, tokenInfo.token);
+    			resolvedSiteId = gs_require("siteId", siteObject.id);
+    		} else {
+    			resolvedSiteId = String(resolvedSiteId);
     		}
-    		var queryObject = gs_graphGetJson(queryEndpoint, tokenInfo.token);
-    		var values = queryObject.value;
-    		if (!(values instanceof Array) || values.length === 0) {
-    			throw new java.lang.RuntimeException("List not found: " + requestedListName);
-    		}
-    		normalizedList = gs_normalizeListEntry(values[0]);
-    	}
     
-    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
-    		siteId: resolvedSiteId,
-    		siteHostname: resolvedSiteHostname,
-    		sitePath: resolvedSitePath,
-    		listId: normalizedList.listId,
-    		listName: normalizedList.name,
-    		listDisplayName: normalizedList.displayName,
-    		webUrl: normalizedList.webUrl,
-    		createdDateTime: normalizedList.createdDateTime,
-    		lastModifiedDateTime: normalizedList.lastModifiedDateTime,
-    		listInfo: normalizedList.list,
-    		sharepointIds: normalizedList.sharepointIds,
-    		tokenPreview: tokenInfo.token.length > 20 ? tokenInfo.token.substring(0, 20) + "..." : tokenInfo.token
-    	});
-    } catch (e) {
-    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    		var explicitListId = gs_safeString(listId);
+    		var requestedListName = gs_safeString(listName);
+    		if (gs_isBlank(explicitListId) && gs_isBlank(requestedListName)) {
+    			throw new java.lang.IllegalArgumentException("Provide listId or listName");
+    		}
+    
+    		var normalizedList = null;
+    		if (!gs_isBlank(explicitListId)) {
+    			var byIdEndpoint =
+    				"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
+    				"/lists/" + gs_encodePathSegment(explicitListId) +
+    				"?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
+    			normalizedList = gs_normalizeListEntry(gs_graphGetJson(byIdEndpoint, tokenInfo.token));
+    		} else {
+    			var queryEndpoint =
+    				"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
+    				"/lists?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
+    			if (!gs_isBlank(requestedListName)) {
+    				var lookup = gs_odataEscapeString(requestedListName);
+    				queryEndpoint = gs_appendQueryParam(queryEndpoint, "$filter", "displayName eq ''" + lookup + "''");
+    			}
+    			var queryObject = gs_graphGetJson(queryEndpoint, tokenInfo.token);
+    			var values = queryObject.value;
+    			if (!(values instanceof Array) || values.length === 0) {
+    				throw new java.lang.RuntimeException("List not found: " + requestedListName);
+    			}
+    			normalizedList = gs_normalizeListEntry(values[0]);
+    		}
+    
+    		response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    			siteId: resolvedSiteId,
+    			siteHostname: resolvedSiteHostname,
+    			sitePath: resolvedSitePath,
+    			listId: normalizedList.listId,
+    			listName: normalizedList.name,
+    			listDisplayName: normalizedList.displayName,
+    			webUrl: normalizedList.webUrl,
+    			createdDateTime: normalizedList.createdDateTime,
+    			lastModifiedDateTime: normalizedList.lastModifiedDateTime,
+    			listInfo: normalizedList.list,
+    			sharepointIds: normalizedList.sharepointIds,
+    			tokenPreview: tokenInfo.token.length > 20 ? tokenInfo.token.substring(0, 20) + "..." : tokenInfo.token
+    		});
+    	} catch (e) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    	}
     }'
 ↓response [steps.JsonToXmlStep-1772620734525]: 
   comment: Converts the JS response object into XML output.
@@ -324,8 +348,8 @@ comment: Resolves a SharePoint Online list by site and list name using Microsoft
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
 ↓siteHostname [variables.RequestableVariable-1772620734697]: 
-  comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
-  description: SharePoint Online hostname
+  comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+  description: SharePoint hostname
 ↓sitePath [variables.RequestableVariable-1772620734793]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
@@ -354,6 +378,38 @@ comment: Resolves a SharePoint Online list by site and list name using Microsoft
     - ↑ciphered: true
     - ↑traceable: false
     - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+  visibility: '-1'
+↓provider [variables.RequestableVariable-1772714810716]: 
+  comment: Backend provider selection graph or onprem.
+  description: Provider selection graph or onprem
+  value: ${lib_Microsoft_Sharepoint.provider}
+↓siteBaseUrl [variables.RequestableVariable-1772714810776]: 
+  comment: Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+  description: On-prem site base URL
+  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}
+↓onPremProtocol [variables.RequestableVariable-1772714810819]: 
+  comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+  description: On-prem protocol fallback
+  value: https
+↓onPremUsername [variables.RequestableVariable-1772714810874]: 
+  comment: Optional technical username for on-prem basic authentication.
+  description: On-prem technical username
+  value: ${lib_Microsoft_Sharepoint.onPrem.username}
+↓onPremPassword [variables.RequestableVariable-1772714810932]: 
+  comment: Optional technical password for on-prem basic authentication.
+  description: On-prem technical password
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb405245a4fafc73fbab6b6999c294cb356940c0e6fa2827adf0d777f2f4f3e526ac991
+  visibility: '-1'
+↓cookieHeader [variables.RequestableVariable-1772714811003]: 
+  comment: Optional Cookie header for on-prem forms authentication.
+  description: Optional on-prem Cookie header
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb40524d13591840f063c4918706e203c3286f7945be3bd1a0c33cb44b7f24f9d492d4c
   visibility: '-1'
 ↓TC_ResolveList [core.TestCase]: 
   ↓siteHostname [variables.TestCaseVariable-1772620737436]: 

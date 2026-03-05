@@ -1,12 +1,14 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Uploads one SharePoint Online drive file content through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
-↓inputVars [steps.InputVariablesStep-1772620918001]: 
+comment: Creates one SharePoint drive item sharing link through Microsoft Graph (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+↓inputVars [steps.InputVariablesStep-1772719747678]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
-↓ExecuteUploadDriveItemContent [steps.SimpleStep-1772620918002]: 
-  comment: Resolves site and drive then uploads file content to a new or existing drive item.
+↓ExecuteCreateDriveItemShareLink [steps.SimpleStep-1772719747727]: 
+  comment: Resolves site and drive then creates one sharing link for a drive item.
   expression: |
-    'var gs_isBlank = function(value) {
+    'include("js/sharepoint_provider.js");
+    
+    var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
     };
     
@@ -117,10 +119,25 @@ comment: Uploads one SharePoint Online drive file content through Microsoft Grap
     	return url + separator + gs_encodePathSegment(name) + "=" + gs_encodePathSegment(value);
     };
     
-    var gs_httpRequest = function(method, endpoint, bearerToken, payload, contentType, accept) {
+    var gs_httpRequest = function(method, endpoint, bearerToken, payload, contentType, accept, headers) {
     	var url = new java.net.URL(String(endpoint));
     	var connection = url.openConnection();
-    	connection.setRequestMethod(String(method));
+    	var normalizedMethod = String(method).toUpperCase();
+    	var methodToUse = normalizedMethod;
+    	var patchOverride = false;
+    
+    	try {
+    		connection.setRequestMethod(methodToUse);
+    	} catch (methodError) {
+    		if (normalizedMethod === "PATCH") {
+    			methodToUse = "POST";
+    			patchOverride = true;
+    			connection.setRequestMethod(methodToUse);
+    		} else {
+    			throw methodError;
+    		}
+    	}
+    
     	connection.setDoInput(true);
     	connection.setUseCaches(false);
     
@@ -129,6 +146,19 @@ comment: Uploads one SharePoint Online drive file content through Microsoft Grap
     	}
     	if (!gs_isBlank(bearerToken)) {
     		connection.setRequestProperty("Authorization", "Bearer " + String(bearerToken));
+    	}
+    	if (patchOverride) {
+    		connection.setRequestProperty("X-HTTP-Method-Override", "PATCH");
+    	}
+    	if (headers !== null && headers !== undefined) {
+    		for (var headerName in headers) {
+    			if (headers.hasOwnProperty(headerName)) {
+    				var headerValue = headers[headerName];
+    				if (!gs_isBlank(headerValue)) {
+    					connection.setRequestProperty(String(headerName), String(headerValue));
+    				}
+    			}
+    		}
     	}
     
     	if (payload !== null && payload !== undefined) {
@@ -163,55 +193,10 @@ comment: Uploads one SharePoint Online drive file content through Microsoft Grap
     	return JSON.parse(result.body);
     };
     
-    var gs_httpRequestBinary = function(method, endpoint, bearerToken, payloadBytes, contentType, accept) {
-    	var url = new java.net.URL(String(endpoint));
-    	var connection = url.openConnection();
-    	connection.setRequestMethod(String(method));
-    	connection.setDoInput(true);
-    	connection.setUseCaches(false);
-    
-    	if (!gs_isBlank(accept)) {
-    		connection.setRequestProperty("Accept", String(accept));
-    	}
-    	if (!gs_isBlank(bearerToken)) {
-    		connection.setRequestProperty("Authorization", "Bearer " + String(bearerToken));
-    	}
-    
-    	if (payloadBytes !== null && payloadBytes !== undefined) {
-    		connection.setDoOutput(true);
-    		if (!gs_isBlank(contentType)) {
-    			connection.setRequestProperty("Content-Type", String(contentType));
-    		}
-    		var output = connection.getOutputStream();
-    		try {
-    			output.write(payloadBytes);
-    		} finally {
-    			output.close();
-    		}
-    	}
-    
-    	var statusCode = connection.getResponseCode();
-    	var body = gs_readAll(statusCode >= 200 && statusCode < 300 ? connection.getInputStream() : connection.getErrorStream());
-    	return {
-    		statusCode: statusCode,
-    		body: body
-    	};
-    };
-    
-    var gs_decodeBase64 = function(name, rawValue) {
-    	var source = gs_require(name, rawValue);
-    	var compact = String(source).replace(/\s/g, "");
-    	try {
-    		return java.util.Base64.getDecoder().decode(compact);
-    	} catch (decodeError) {
-    		throw new java.lang.IllegalArgumentException("Invalid base64 for " + name + ": " + gs_safeString(decodeError.message));
-    	}
-    };
-    
-    var gs_graphPutBinary = function(endpoint, token, payloadBytes, contentType) {
-    	var result = gs_httpRequestBinary("PUT", endpoint, token, payloadBytes, contentType, "application/json");
+    var gs_graphPatchJson = function(endpoint, token, payloadObject, headers) {
+    	var result = gs_httpRequest("PATCH", endpoint, token, JSON.stringify(payloadObject), "application/json", "application/json", headers);
     	if (result.statusCode < 200 || result.statusCode >= 300) {
-    		throw new java.lang.RuntimeException("Graph upload failed (" + result.statusCode + "): " + result.body);
+    		throw new java.lang.RuntimeException("Graph patch failed (" + result.statusCode + "): " + result.body);
     	}
     	if (gs_isBlank(result.body)) {
     		return {};
@@ -306,6 +291,20 @@ comment: Uploads one SharePoint Online drive file content through Microsoft Grap
     		}
     	}
     	return normalized;
+    };
+    
+    var gs_parseJsonObject = function(name, rawJson) {
+    	var source = gs_require(name, rawJson);
+    	var parsed = null;
+    	try {
+    		parsed = JSON.parse(String(source));
+    	} catch (parseError) {
+    		throw new java.lang.IllegalArgumentException("Invalid JSON for " + name + ": " + gs_safeString(parseError.message));
+    	}
+    	if (parsed === null || parsed === undefined || parsed instanceof Array || typeof parsed !== "object") {
+    		throw new java.lang.IllegalArgumentException(name + " must be a JSON object");
+    	}
+    	return parsed;
     };
     
     var gs_normalizeDrive = function(driveObject) {
@@ -469,101 +468,140 @@ comment: Uploads one SharePoint Online drive file content through Microsoft Grap
     	};
     };
     
-    var graphOperation = "upload_drive_item_content";
+    var gs_resolveRootItemId = function(token, resolvedDriveId) {
+    	var endpoint =
+    		"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDriveId) +
+    		"/root?$select=id";
+    	var rootObject = gs_graphGetJson(endpoint, token);
+    	return gs_require("rootItemId", rootObject.id);
+    };
+    
+    var graphOperation = "create_drive_item_share_link";
     var requiredPermission = "Files.ReadWrite.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
+    var requestedProvider = sppr_normalizeProvider(provider, "graph");
     
-    try {
-    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
-    	tokenMode = tokenInfo.mode;
-    
-    	var includeRaw = gs_toBoolean(includeRawItem, false);
-    	var shouldReturnUploadedItem = gs_toBoolean(returnUploadedItem, true);
-    	var selectedFields = gs_splitCsv(selectFields);
-    	var explicitItemId = gs_safeString(itemId);
-    	var requestedParentId = gs_safeString(parentItemId);
-    	var normalizedParentId = gs_isBlank(requestedParentId) ? "root" : requestedParentId;
-    	var targetFileName = gs_safeString(fileName);
-    	var binaryContent = gs_decodeBase64("contentBase64", contentBase64);
-    	var resolvedContentType = gs_defaultString(contentType, "application/octet-stream");
-    
-    	var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
-    	var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
-    	var resolvedDrive = resolvedDriveData.drive;
-    	var resolvedList = resolvedDriveData.list;
-    
-    	var uploadTarget = "";
-    	var uploadUrl = "";
-    	if (!gs_isBlank(explicitItemId)) {
-    		if (String(explicitItemId).toLowerCase() === "root") {
-    			throw new java.lang.IllegalArgumentException("Uploading on drive root is not allowed. Provide a file item id.");
-    		}
-    		uploadTarget = "item";
-    		uploadUrl =
-    			"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
-    			"/items/" + gs_encodePathSegment(explicitItemId) + "/content";
-    	} else {
-    		targetFileName = gs_require("fileName", fileName).trim();
-    		if (targetFileName.length === 0) {
-    			throw new java.lang.IllegalArgumentException("fileName cannot be empty");
-    		}
-    		uploadTarget = "parent";
-    		uploadUrl =
-    			"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
-    			(gs_isBlank(requestedParentId) || String(requestedParentId).toLowerCase() === "root"
-    				? "/root:/" + gs_encodePathSegment(targetFileName) + ":/content"
-    				: "/items/" + gs_encodePathSegment(requestedParentId) + ":/" + gs_encodePathSegment(targetFileName) + ":/content");
-    	}
-    
-    	var uploadedItem = gs_normalizeDriveItem(gs_graphPutBinary(uploadUrl, tokenInfo.token, binaryContent, resolvedContentType), includeRaw);
-    	var uploadedItemId = gs_safeString(uploadedItem.itemId);
-    	if (shouldReturnUploadedItem) {
-    		var targetUploadedItemId = gs_require("uploadedItemId", uploadedItemId);
-    		var getUrl =
-    			"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
-    			"/items/" + gs_encodePathSegment(targetUploadedItemId);
-    		if (selectedFields.length > 0) {
-    			getUrl = gs_appendQueryParam(getUrl, "$select", selectedFields.join(","));
-    		}
-    		uploadedItem = gs_normalizeDriveItem(gs_graphGetJson(getUrl, tokenInfo.token), includeRaw);
-    	}
-    
+    if (requestedProvider === "onprem") {
+    	tokenMode = "onprem";
     	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
-    		siteId: resolvedSite.siteId,
-    		siteHostname: resolvedSite.siteHostname,
-    		sitePath: resolvedSite.sitePath,
-    		driveId: resolvedDrive.driveId,
-    		driveName: resolvedDrive.driveName,
-    		driveWebUrl: resolvedDrive.driveWebUrl,
-    		driveType: resolvedDrive.driveType,
-    		sharepointIds: resolvedDrive.sharepointIds,
-    		quota: resolvedDrive.quota,
-    		owner: resolvedDrive.owner,
-    		resolvedFromList: resolvedList !== null,
-    		listId: resolvedList === null ? "" : resolvedList.listId,
-    		listName: resolvedList === null ? "" : resolvedList.listName,
-    		listDisplayName: resolvedList === null ? "" : resolvedList.listDisplayName,
-    		listWebUrl: resolvedList === null ? "" : resolvedList.listWebUrl,
-    		listInfo: resolvedList === null ? {} : resolvedList.listInfo,
-    		listSharepointIds: resolvedList === null ? {} : resolvedList.sharepointIds,
+    		supported: false,
+    		fallbackStatus: "onprem_not_supported",
+    		message: "Create share link is not supported for SharePoint on-prem in unified mode. Use provider=graph.",
     		query: {
-    			uploadTarget: uploadTarget,
-    			itemId: explicitItemId,
-    			parentItemId: normalizedParentId,
-    			fileName: targetFileName,
-    			contentType: resolvedContentType,
-    			contentBytes: binaryContent.length,
-    			returnUploadedItem: shouldReturnUploadedItem,
-    			selectFields: selectedFields,
-    			includeRawItem: includeRaw
+    			itemId: gs_safeString(itemId),
+    			linkType: gs_defaultString(linkType, "view").toLowerCase(),
+    			scope: gs_defaultString(scope, "organization").toLowerCase(),
+    			passwordProvided: !gs_isBlank(password),
+    			expirationDateTimeProvided: !gs_isBlank(expirationDateTime),
+    			retainInheritedPermissions: gs_toBoolean(retainInheritedPermissions, true),
+    			includeRawPermission: gs_toBoolean(includeRawPermission, false)
     		},
-    		item: uploadedItem
+    		permission: {}
     	});
-    } catch (e) {
-    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    } else {
+    	try {
+    		var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    		tokenMode = tokenInfo.mode;
+    
+    		var targetItemId = gs_require("itemId", itemId);
+    		if (String(targetItemId).toLowerCase() === "root") {
+    			throw new java.lang.IllegalArgumentException("Creating share link on drive root is not allowed. Provide a child item id.");
+    		}
+    
+    		var requestedLinkType = gs_defaultString(linkType, "view").toLowerCase();
+    		var requestedScope = gs_defaultString(scope, "organization").toLowerCase();
+    		var requestedPassword = gs_safeString(password);
+    		var requestedExpiration = gs_safeString(expirationDateTime);
+    		var requestedRetainInherited = gs_toBoolean(retainInheritedPermissions, true);
+    		var includeRaw = gs_toBoolean(includeRawPermission, false);
+    
+    		if (requestedLinkType !== "view" && requestedLinkType !== "edit" && requestedLinkType !== "embed" && requestedLinkType !== "blocksDownload") {
+    			throw new java.lang.IllegalArgumentException("linkType must be one of: view, edit, embed, blocksDownload");
+    		}
+    		if (requestedScope !== "anonymous" && requestedScope !== "organization" && requestedScope !== "users") {
+    			throw new java.lang.IllegalArgumentException("scope must be one of: anonymous, organization, users");
+    		}
+    
+    		var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
+    		var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
+    		var resolvedDrive = resolvedDriveData.drive;
+    		var resolvedList = resolvedDriveData.list;
+    
+    		var createLinkObject = {
+    			type: requestedLinkType,
+    			scope: requestedScope,
+    			retainInheritedPermissions: requestedRetainInherited
+    		};
+    		if (!gs_isBlank(requestedPassword)) {
+    			createLinkObject.password = requestedPassword;
+    		}
+    		if (!gs_isBlank(requestedExpiration)) {
+    			createLinkObject.expirationDateTime = requestedExpiration;
+    		}
+    
+    		var createLinkUrl =
+    			"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
+    			"/items/" + gs_encodePathSegment(targetItemId) + "/createLink";
+    
+    		var createLinkResponse = gs_httpRequest("POST", createLinkUrl, tokenInfo.token, JSON.stringify(createLinkObject), "application/json", "application/json", null);
+    		if (createLinkResponse.statusCode < 200 || createLinkResponse.statusCode >= 300) {
+    			throw new java.lang.RuntimeException("Graph createLink failed (" + createLinkResponse.statusCode + "): " + createLinkResponse.body);
+    		}
+    		if (gs_isBlank(createLinkResponse.body)) {
+    			throw new java.lang.RuntimeException("Graph createLink returned empty body");
+    		}
+    		var permissionObject = JSON.parse(createLinkResponse.body);
+    		var responsePermission = {
+    			permissionId: gs_safeString(permissionObject.id),
+    			shareId: gs_safeString(permissionObject.shareId),
+    			roles: permissionObject.roles instanceof Array ? permissionObject.roles : [],
+    			expirationDateTime: gs_safeString(permissionObject.expirationDateTime),
+    			hasPassword: !gs_isBlank(permissionObject.hasPassword) ? String(permissionObject.hasPassword) : "",
+    			link: permissionObject.link === undefined || permissionObject.link === null ? {} : permissionObject.link,
+    			inheritedFrom: permissionObject.inheritedFrom === undefined || permissionObject.inheritedFrom === null ? {} : permissionObject.inheritedFrom,
+    			grantedToV2: permissionObject.grantedToV2 === undefined || permissionObject.grantedToV2 === null ? {} : permissionObject.grantedToV2,
+    			grantedToIdentitiesV2: permissionObject.grantedToIdentitiesV2 === undefined || permissionObject.grantedToIdentitiesV2 === null ? [] : permissionObject.grantedToIdentitiesV2,
+    			application: permissionObject.application === undefined || permissionObject.application === null ? {} : permissionObject.application
+    		};
+    		if (includeRaw) {
+    			responsePermission.raw = permissionObject;
+    		}
+    
+    		response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    			siteId: resolvedSite.siteId,
+    			siteHostname: resolvedSite.siteHostname,
+    			sitePath: resolvedSite.sitePath,
+    			driveId: resolvedDrive.driveId,
+    			driveName: resolvedDrive.driveName,
+    			driveWebUrl: resolvedDrive.driveWebUrl,
+    			driveType: resolvedDrive.driveType,
+    			sharepointIds: resolvedDrive.sharepointIds,
+    			quota: resolvedDrive.quota,
+    			owner: resolvedDrive.owner,
+    			resolvedFromList: resolvedList !== null,
+    			listId: resolvedList === null ? "" : resolvedList.listId,
+    			listName: resolvedList === null ? "" : resolvedList.listName,
+    			listDisplayName: resolvedList === null ? "" : resolvedList.listDisplayName,
+    			listWebUrl: resolvedList === null ? "" : resolvedList.listWebUrl,
+    			listInfo: resolvedList === null ? {} : resolvedList.listInfo,
+    			listSharepointIds: resolvedList === null ? {} : resolvedList.sharepointIds,
+    			query: {
+    				itemId: targetItemId,
+    				linkType: requestedLinkType,
+    				scope: requestedScope,
+    				passwordProvided: !gs_isBlank(requestedPassword),
+    				expirationDateTimeProvided: !gs_isBlank(requestedExpiration),
+    				retainInheritedPermissions: requestedRetainInherited,
+    				includeRawPermission: includeRaw
+    			},
+    			permission: responsePermission
+    		});
+    	} catch (e) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    	}
     }'
-↓response [steps.JsonToXmlStep-1772620918003]: 
+↓response [steps.JsonToXmlStep-1772719747757]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
     - xmlizable: 
@@ -577,86 +615,86 @@ comment: Uploads one SharePoint Online drive file content through Microsoft Grap
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
-↓siteId [variables.RequestableVariable-1772620918004]: 
+↓siteId [variables.RequestableVariable-1772719747793]: 
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
-↓siteHostname [variables.RequestableVariable-1772620918005]: 
-  comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
-  description: SharePoint Online hostname
-↓sitePath [variables.RequestableVariable-1772620918006]: 
+↓siteHostname [variables.RequestableVariable-1772719747838]: 
+  comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+  description: SharePoint hostname
+↓sitePath [variables.RequestableVariable-1772719747893]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
   value: /sites/convertigo
-↓driveId [variables.RequestableVariable-1772620918007]: 
+↓driveId [variables.RequestableVariable-1772719747952]: 
   comment: Optional drive identifier. If provided, driveName/listId/listName are ignored.
   description: Optional Graph drive identifier
-↓driveName [variables.RequestableVariable-1772620918008]: 
+↓driveName [variables.RequestableVariable-1772719748018]: 
   comment: Drive name used to resolve driveId when driveId is not provided.
   description: SharePoint drive name
-↓listId [variables.RequestableVariable-1772620918009]: 
+↓listId [variables.RequestableVariable-1772719748092]: 
   comment: Optional list identifier used to resolve associated drive.
   description: Optional Graph list identifier
-↓listName [variables.RequestableVariable-1772620918010]: 
+↓listName [variables.RequestableVariable-1772719748173]: 
   comment: List display name or internal name used to resolve associated drive.
   description: SharePoint list name
-↓itemId [variables.RequestableVariable-1772620918011]: 
-  comment: Optional existing drive item id when uploading new content revision.
-  description: Existing drive item id
-↓parentItemId [variables.RequestableVariable-1772620918012]: 
-  comment: Parent drive item id used when itemId is empty. Use root or leave empty for drive root.
-  description: Parent drive item id
-  value: root
-↓fileName [variables.RequestableVariable-1772620918013]: 
-  comment: File name used when itemId is empty.
-  description: File name
-↓contentBase64 [variables.RequestableVariable-1772620918014]: 
-  comment: Base64 content to upload.
-  description: Base64 file content
-  required: true
-↓contentType [variables.RequestableVariable-1772620918015]: 
-  comment: Content type sent to Graph content endpoint.
-  description: Content type
-  value: application/octet-stream
-↓returnUploadedItem [variables.RequestableVariable-1772620918016]: 
-  comment: true reloads uploaded item with optional property selection before returning.
-  description: Return uploaded item details
+↓itemId [variables.RequestableVariable-1772719748267]: 
+  comment: Target drive item identifier.
+  description: Target drive item id
+↓linkType [variables.RequestableVariable-1772719748362]: 
+  comment: Sharing link type (view, edit, embed, blocksDownload).
+  description: Link type
+  value: view
+↓scope [variables.RequestableVariable-1772719748465]: 
+  comment: Sharing link scope (anonymous, organization, users).
+  description: Link scope
+  value: organization
+↓password [variables.RequestableVariable-1772719748575]: 
+  comment: Optional password used when scope/type supports it.
+  description: Optional link password
+↓expirationDateTime [variables.RequestableVariable-1772719748694]: 
+  comment: Optional link expiration datetime in ISO-8601 format.
+  description: Optional expiration datetime
+↓retainInheritedPermissions [variables.RequestableVariable-1772719748827]: 
+  comment: Retains inherited permissions on first share when true.
+  description: Retain inherited permissions
   value: true
-↓selectFields [variables.RequestableVariable-1772620918017]: 
-  comment: Optional comma-separated list of Graph driveItem properties to select.
-  description: Comma-separated property selection
-↓includeRawItem [variables.RequestableVariable-1772620918018]: 
-  comment: true includes raw Graph driveItem payload under response.data.item.raw.
-  description: Include raw Graph payload
+↓includeRawPermission [variables.RequestableVariable-1772719748972]: 
+  comment: true includes raw Graph permission payload under response.data.permission.raw.
+  description: Include raw Graph permission payload
   value: false
-↓accessToken [variables.RequestableVariable-1772620918019]: 
+↓provider [variables.RequestableVariable-1772719749115]: 
+  comment: Backend provider selection graph or onprem.
+  description: Provider selection graph or onprem
+  value: ${lib_Microsoft_Sharepoint.provider}
+↓accessToken [variables.RequestableVariable-1772719749261]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
-↓tenantId [variables.RequestableVariable-1772620918020]: 
+↓tenantId [variables.RequestableVariable-1772719749414]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
   value: ${Microsoft_AzGraph.tenantId}
-↓clientId [variables.RequestableVariable-1772620918021]: 
+↓clientId [variables.RequestableVariable-1772719749580]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
   value: ${Microsoft_AzGraph.clientId}
-↓clientSecret [variables.RequestableVariable-1772620918022]: 
+↓clientSecret [variables.RequestableVariable-1772719749759]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
   value: 
     - ↑ciphered: true
     - ↑traceable: false
-    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+    - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: '-1'
-↓TC_UploadDriveItemContent [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772620918023]: 
+↓TC_CreateDriveItemShareLink [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772719751320]: 
     value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772620918024]: 
+  ↓sitePath [variables.TestCaseVariable-1772719751343]: 
     value: /sites/test1
-  ↓driveName [variables.TestCaseVariable-1772620918025]: 
+  ↓driveName [variables.TestCaseVariable-1772719751372]: 
     value: Documents
-  ↓parentItemId [variables.TestCaseVariable-1772620918026]: 
-    value: root
-  ↓fileName [variables.TestCaseVariable-1772620918027]: 
-    value: upload-from-convertigo.txt
-  ↓contentBase64 [variables.TestCaseVariable-1772620918028]: 
-    value: SGVsbG8gZnJvbSBDb252ZXJ0aWdvIQ==
+  ↓itemId [variables.TestCaseVariable-1772719751408]: 
+    value: 01PETTHVHBULYXIKX2EZFIAFNZVAYMGFUP
+  ↓linkType [variables.TestCaseVariable-1772719751451]: 
+    value: view
+  ↓scope [variables.TestCaseVariable-1772719751501]: 
+    value: organization

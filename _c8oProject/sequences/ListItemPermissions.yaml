@@ -1,12 +1,14 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Lists permissions of one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
-↓inputVars [steps.InputVariablesStep-1772639975912]: 
+comment: Lists permissions of one SharePoint drive item through Microsoft Graph (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
+↓inputVars [steps.InputVariablesStep-1772719772904]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
-↓ExecuteListDriveItemPermissions [steps.SimpleStep-1772639975940]: 
+↓ExecuteListDriveItemPermissions [steps.SimpleStep-1772719772956]: 
   comment: Resolves site and drive then lists permissions on one drive item.
   expression: |
-    'var gs_isBlank = function(value) {
+    'include("js/sharepoint_provider.js");
+    
+    var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
     };
     
@@ -478,116 +480,138 @@ comment: Lists permissions of one SharePoint Online drive item through Microsoft
     var requiredPermission = "Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
+    var requestedProvider = sppr_normalizeProvider(provider, "graph");
     
-    try {
-    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
-    	tokenMode = tokenInfo.mode;
+    if (requestedProvider === "onprem") {
+    	tokenMode = "onprem";
+    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    		supported: false,
+    		fallbackStatus: "onprem_not_supported",
+    		message: "Listing drive item permissions is not supported for SharePoint on-prem in unified mode. Use provider=graph.",
+    		query: {
+    			itemId: gs_safeString(itemId),
+    			top: gs_parseInteger("top", top, 200),
+    			maxPages: gs_parseInteger("maxPages", maxPages, 20),
+    			selectFields: gs_splitCsv(selectFields),
+    			includeRawPermission: gs_toBoolean(includeRawPermission, false)
+    		},
+    		count: 0,
+    		pagesFetched: 0,
+    		hasMore: false,
+    		nextLink: "",
+    		permissions: []
+    	});
+    } else {
+    	try {
+    		var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    		tokenMode = tokenInfo.mode;
     
-    	var targetItemId = gs_require("itemId", itemId);
-    	if (String(targetItemId).toLowerCase() === "root") {
-    		throw new java.lang.IllegalArgumentException("Listing permissions on drive root is not allowed. Provide a child item id.");
-    	}
-    
-    	var selectedFields = gs_splitCsv(selectFields);
-    	var pageTop = gs_parseInteger("top", top, 200);
-    	if (pageTop < 1) {
-    		pageTop = 1;
-    	}
-    	if (pageTop > 999) {
-    		pageTop = 999;
-    	}
-    
-    	var maxPageCount = gs_parseInteger("maxPages", maxPages, 20);
-    	if (maxPageCount < 1) {
-    		maxPageCount = 1;
-    	}
-    	if (maxPageCount > 100) {
-    		maxPageCount = 100;
-    	}
-    
-    	var includeRaw = gs_toBoolean(includeRawPermission, false);
-    
-    	var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
-    	var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
-    	var resolvedDrive = resolvedDriveData.drive;
-    	var resolvedList = resolvedDriveData.list;
-    
-    	var requestUrl =
-    		"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
-    		"/items/" + gs_encodePathSegment(targetItemId) + "/permissions";
-    	requestUrl = gs_appendQueryParam(requestUrl, "$top", String(pageTop));
-    	if (selectedFields.length > 0) {
-    		requestUrl = gs_appendQueryParam(requestUrl, "$select", selectedFields.join(","));
-    	}
-    
-    	var responsePermissions = [];
-    	var nextUrl = requestUrl;
-    	var pageCount = 0;
-    	while (!gs_isBlank(nextUrl) && pageCount < maxPageCount) {
-    		var pageObject = gs_graphGetJson(nextUrl, tokenInfo.token);
-    		var permissionCandidates = pageObject.value instanceof Array ? pageObject.value : [];
-    
-    		var p;
-    		for (p = 0; p < permissionCandidates.length; p++) {
-    			var permissionObject = permissionCandidates[p];
-    			var mappedPermission = {
-    				permissionId: gs_safeString(permissionObject.id),
-    				shareId: gs_safeString(permissionObject.shareId),
-    				roles: permissionObject.roles instanceof Array ? permissionObject.roles : [],
-    				expirationDateTime: gs_safeString(permissionObject.expirationDateTime),
-    				hasPassword: !gs_isBlank(permissionObject.hasPassword) ? String(permissionObject.hasPassword) : "",
-    				link: permissionObject.link === undefined || permissionObject.link === null ? {} : permissionObject.link,
-    				inheritedFrom: permissionObject.inheritedFrom === undefined || permissionObject.inheritedFrom === null ? {} : permissionObject.inheritedFrom,
-    				invitation: permissionObject.invitation === undefined || permissionObject.invitation === null ? {} : permissionObject.invitation,
-    				grantedToV2: permissionObject.grantedToV2 === undefined || permissionObject.grantedToV2 === null ? {} : permissionObject.grantedToV2,
-    				grantedToIdentitiesV2: permissionObject.grantedToIdentitiesV2 === undefined || permissionObject.grantedToIdentitiesV2 === null ? [] : permissionObject.grantedToIdentitiesV2,
-    				application: permissionObject.application === undefined || permissionObject.application === null ? {} : permissionObject.application
-    			};
-    			if (includeRaw) {
-    				mappedPermission.raw = permissionObject;
-    			}
-    			responsePermissions.push(mappedPermission);
+    		var targetItemId = gs_require("itemId", itemId);
+    		if (String(targetItemId).toLowerCase() === "root") {
+    			throw new java.lang.IllegalArgumentException("Listing permissions on drive root is not allowed. Provide a child item id.");
     		}
     
-    		pageCount++;
-    		nextUrl = pageObject["@odata.nextLink"] === undefined || pageObject["@odata.nextLink"] === null ? "" : String(pageObject["@odata.nextLink"]);
-    	}
+    		var selectedFields = gs_splitCsv(selectFields);
+    		var pageTop = gs_parseInteger("top", top, 200);
+    		if (pageTop < 1) {
+    			pageTop = 1;
+    		}
+    		if (pageTop > 999) {
+    			pageTop = 999;
+    		}
     
-    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
-    		siteId: resolvedSite.siteId,
-    		siteHostname: resolvedSite.siteHostname,
-    		sitePath: resolvedSite.sitePath,
-    		driveId: resolvedDrive.driveId,
-    		driveName: resolvedDrive.driveName,
-    		driveWebUrl: resolvedDrive.driveWebUrl,
-    		driveType: resolvedDrive.driveType,
-    		sharepointIds: resolvedDrive.sharepointIds,
-    		quota: resolvedDrive.quota,
-    		owner: resolvedDrive.owner,
-    		resolvedFromList: resolvedList !== null,
-    		listId: resolvedList === null ? "" : resolvedList.listId,
-    		listName: resolvedList === null ? "" : resolvedList.listName,
-    		listDisplayName: resolvedList === null ? "" : resolvedList.listDisplayName,
-    		listWebUrl: resolvedList === null ? "" : resolvedList.listWebUrl,
-    		listInfo: resolvedList === null ? {} : resolvedList.listInfo,
-    		listSharepointIds: resolvedList === null ? {} : resolvedList.sharepointIds,
-    		query: {
-    			itemId: targetItemId,
-    			top: pageTop,
-    			maxPages: maxPageCount,
-    			selectFields: selectedFields,
-    			includeRawPermission: includeRaw
-    		},
-    		count: responsePermissions.length,
-    		pagesFetched: pageCount,
-    		hasMore: !gs_isBlank(nextUrl),
-    		nextLink: gs_safeString(nextUrl),
-    		permissions: responsePermissions
-    	});
-    } catch (e) {
-    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    		var maxPageCount = gs_parseInteger("maxPages", maxPages, 20);
+    		if (maxPageCount < 1) {
+    			maxPageCount = 1;
+    		}
+    		if (maxPageCount > 100) {
+    			maxPageCount = 100;
+    		}
+    
+    		var includeRaw = gs_toBoolean(includeRawPermission, false);
+    
+    		var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
+    		var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
+    		var resolvedDrive = resolvedDriveData.drive;
+    		var resolvedList = resolvedDriveData.list;
+    
+    		var requestUrl =
+    			"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
+    			"/items/" + gs_encodePathSegment(targetItemId) + "/permissions";
+    		requestUrl = gs_appendQueryParam(requestUrl, "$top", String(pageTop));
+    		if (selectedFields.length > 0) {
+    			requestUrl = gs_appendQueryParam(requestUrl, "$select", selectedFields.join(","));
+    		}
+    
+    		var responsePermissions = [];
+    		var nextUrl = requestUrl;
+    		var pageCount = 0;
+    		while (!gs_isBlank(nextUrl) && pageCount < maxPageCount) {
+    			var pageObject = gs_graphGetJson(nextUrl, tokenInfo.token);
+    			var permissionCandidates = pageObject.value instanceof Array ? pageObject.value : [];
+    
+    			var p;
+    			for (p = 0; p < permissionCandidates.length; p++) {
+    				var permissionObject = permissionCandidates[p];
+    				var mappedPermission = {
+    					permissionId: gs_safeString(permissionObject.id),
+    					shareId: gs_safeString(permissionObject.shareId),
+    					roles: permissionObject.roles instanceof Array ? permissionObject.roles : [],
+    					expirationDateTime: gs_safeString(permissionObject.expirationDateTime),
+    					hasPassword: !gs_isBlank(permissionObject.hasPassword) ? String(permissionObject.hasPassword) : "",
+    					link: permissionObject.link === undefined || permissionObject.link === null ? {} : permissionObject.link,
+    					inheritedFrom: permissionObject.inheritedFrom === undefined || permissionObject.inheritedFrom === null ? {} : permissionObject.inheritedFrom,
+    					invitation: permissionObject.invitation === undefined || permissionObject.invitation === null ? {} : permissionObject.invitation,
+    					grantedToV2: permissionObject.grantedToV2 === undefined || permissionObject.grantedToV2 === null ? {} : permissionObject.grantedToV2,
+    					grantedToIdentitiesV2: permissionObject.grantedToIdentitiesV2 === undefined || permissionObject.grantedToIdentitiesV2 === null ? [] : permissionObject.grantedToIdentitiesV2,
+    					application: permissionObject.application === undefined || permissionObject.application === null ? {} : permissionObject.application
+    				};
+    				if (includeRaw) {
+    					mappedPermission.raw = permissionObject;
+    				}
+    				responsePermissions.push(mappedPermission);
+    			}
+    
+    			pageCount++;
+    			nextUrl = pageObject["@odata.nextLink"] === undefined || pageObject["@odata.nextLink"] === null ? "" : String(pageObject["@odata.nextLink"]);
+    		}
+    
+    		response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    			siteId: resolvedSite.siteId,
+    			siteHostname: resolvedSite.siteHostname,
+    			sitePath: resolvedSite.sitePath,
+    			driveId: resolvedDrive.driveId,
+    			driveName: resolvedDrive.driveName,
+    			driveWebUrl: resolvedDrive.driveWebUrl,
+    			driveType: resolvedDrive.driveType,
+    			sharepointIds: resolvedDrive.sharepointIds,
+    			quota: resolvedDrive.quota,
+    			owner: resolvedDrive.owner,
+    			resolvedFromList: resolvedList !== null,
+    			listId: resolvedList === null ? "" : resolvedList.listId,
+    			listName: resolvedList === null ? "" : resolvedList.listName,
+    			listDisplayName: resolvedList === null ? "" : resolvedList.listDisplayName,
+    			listWebUrl: resolvedList === null ? "" : resolvedList.listWebUrl,
+    			listInfo: resolvedList === null ? {} : resolvedList.listInfo,
+    			listSharepointIds: resolvedList === null ? {} : resolvedList.sharepointIds,
+    			query: {
+    				itemId: targetItemId,
+    				top: pageTop,
+    				maxPages: maxPageCount,
+    				selectFields: selectedFields,
+    				includeRawPermission: includeRaw
+    			},
+    			count: responsePermissions.length,
+    			pagesFetched: pageCount,
+    			hasMore: !gs_isBlank(nextUrl),
+    			nextLink: gs_safeString(nextUrl),
+    			permissions: responsePermissions
+    		});
+    	} catch (e) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    	}
     }'
-↓response [steps.JsonToXmlStep-1772639975989]: 
+↓response [steps.JsonToXmlStep-1772719772988]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
     - xmlizable: 
@@ -601,75 +625,79 @@ comment: Lists permissions of one SharePoint Online drive item through Microsoft
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
-↓siteId [variables.RequestableVariable-1772639976036]: 
+↓siteId [variables.RequestableVariable-1772719773029]: 
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
-↓siteHostname [variables.RequestableVariable-1772639976088]: 
-  comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
-  description: SharePoint Online hostname
-↓sitePath [variables.RequestableVariable-1772639976154]: 
+↓siteHostname [variables.RequestableVariable-1772719773078]: 
+  comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+  description: SharePoint hostname
+↓sitePath [variables.RequestableVariable-1772719773133]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
   value: /sites/convertigo
-↓driveId [variables.RequestableVariable-1772639976221]: 
+↓driveId [variables.RequestableVariable-1772719773253]: 
   comment: Optional drive identifier. If provided, driveName/listId/listName are ignored.
   description: Optional Graph drive identifier
-↓driveName [variables.RequestableVariable-1772639976306]: 
+↓driveName [variables.RequestableVariable-1772719773341]: 
   comment: Drive name used to resolve driveId when driveId is not provided.
   description: SharePoint drive name
-↓listId [variables.RequestableVariable-1772639976406]: 
+↓listId [variables.RequestableVariable-1772719773446]: 
   comment: Optional list identifier used to resolve associated drive.
   description: Optional Graph list identifier
-↓listName [variables.RequestableVariable-1772639976522]: 
+↓listName [variables.RequestableVariable-1772719773550]: 
   comment: List display name or internal name used to resolve associated drive.
   description: SharePoint list name
-↓itemId [variables.RequestableVariable-1772639976648]: 
+↓itemId [variables.RequestableVariable-1772719773678]: 
   comment: Target drive item identifier.
   description: Target drive item id
-↓top [variables.RequestableVariable-1772639976753]: 
+↓top [variables.RequestableVariable-1772719773797]: 
   comment: Maximum number of permissions requested per Graph page.
   description: Page size
   value: 200.0
-↓maxPages [variables.RequestableVariable-1772639976873]: 
+↓maxPages [variables.RequestableVariable-1772719773919]: 
   comment: Maximum number of Graph pages fetched before stopping pagination.
   description: Maximum pages
   value: 20.0
-↓selectFields [variables.RequestableVariable-1772639977008]: 
+↓selectFields [variables.RequestableVariable-1772719774043]: 
   comment: Optional comma-separated list of Graph permission properties to select.
   description: Comma-separated property selection
-↓includeRawPermission [variables.RequestableVariable-1772639977142]: 
+↓includeRawPermission [variables.RequestableVariable-1772719774175]: 
   comment: true includes raw Graph permission payload under response.data.permissions[*].raw.
   description: Include raw Graph permission payload
   value: false
-↓accessToken [variables.RequestableVariable-1772639977285]: 
+↓provider [variables.RequestableVariable-1772719774317]: 
+  comment: Backend provider selection graph or onprem.
+  description: Provider selection graph or onprem
+  value: ${lib_Microsoft_Sharepoint.provider}
+↓accessToken [variables.RequestableVariable-1772719774475]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
-↓tenantId [variables.RequestableVariable-1772639977436]: 
+↓tenantId [variables.RequestableVariable-1772719774631]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
   value: ${Microsoft_AzGraph.tenantId}
-↓clientId [variables.RequestableVariable-1772639977584]: 
+↓clientId [variables.RequestableVariable-1772719774793]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
   value: ${Microsoft_AzGraph.clientId}
-↓clientSecret [variables.RequestableVariable-1772639977748]: 
+↓clientSecret [variables.RequestableVariable-1772719774958]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
   value: 
     - ↑ciphered: true
     - ↑traceable: false
-    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+    - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: '-1'
 ↓TC_ListDriveItemPermissions [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772639979165]: 
+  ↓siteHostname [variables.TestCaseVariable-1772719776729]: 
     value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772639979200]: 
+  ↓sitePath [variables.TestCaseVariable-1772719776753]: 
     value: /sites/test1
-  ↓driveName [variables.TestCaseVariable-1772639979238]: 
+  ↓driveName [variables.TestCaseVariable-1772719776782]: 
     value: Documents
-  ↓itemId [variables.TestCaseVariable-1772639979283]: 
+  ↓itemId [variables.TestCaseVariable-1772719776821]: 
     value: 01PETTHVHBULYXIKX2EZFIAFNZVAYMGFUP
-  ↓top [variables.TestCaseVariable-1772639979344]: 
+  ↓top [variables.TestCaseVariable-1772719776868]: 
     value: 100.0
-  ↓maxPages [variables.TestCaseVariable-1772639979402]: 
+  ↓maxPages [variables.TestCaseVariable-1772719776924]: 
     value: 5.0

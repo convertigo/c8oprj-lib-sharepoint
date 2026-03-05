@@ -1,10 +1,10 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Uploads one SharePoint Online drive file using Graph upload session and chunk transfer. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
-↓inputVars [steps.InputVariablesStep-1772620998001]: 
+comment: Uploads one SharePoint Online drive file content through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+↓inputVars [steps.InputVariablesStep-1772719801947]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
-↓ExecuteUploadDriveItemLargeContent [steps.SimpleStep-1772620998002]: 
-  comment: Resolves site and drive then uploads content in chunks through a Graph upload session.
+↓ExecuteUploadDriveItemContent [steps.SimpleStep-1772719801969]: 
+  comment: Resolves site and drive then uploads file content to a new or existing drive item.
   expression: |
     'var gs_isBlank = function(value) {
     	return value === null || value === undefined || String(value).trim().length === 0;
@@ -163,7 +163,7 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
     	return JSON.parse(result.body);
     };
     
-    var gs_httpRequestBinary = function(method, endpoint, bearerToken, payloadBytes, contentType, accept, headers) {
+    var gs_httpRequestBinary = function(method, endpoint, bearerToken, payloadBytes, contentType, accept) {
     	var url = new java.net.URL(String(endpoint));
     	var connection = url.openConnection();
     	connection.setRequestMethod(String(method));
@@ -175,16 +175,6 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
     	}
     	if (!gs_isBlank(bearerToken)) {
     		connection.setRequestProperty("Authorization", "Bearer " + String(bearerToken));
-    	}
-    	if (headers !== null && headers !== undefined) {
-    		for (var headerName in headers) {
-    			if (headers.hasOwnProperty(headerName)) {
-    				var headerValue = headers[headerName];
-    				if (!gs_isBlank(headerValue)) {
-    					connection.setRequestProperty(String(headerName), String(headerValue));
-    				}
-    			}
-    		}
     	}
     
     	if (payloadBytes !== null && payloadBytes !== undefined) {
@@ -204,10 +194,7 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
     	var body = gs_readAll(statusCode >= 200 && statusCode < 300 ? connection.getInputStream() : connection.getErrorStream());
     	return {
     		statusCode: statusCode,
-    		body: body,
-    		contentRange: gs_safeString(connection.getHeaderField("Content-Range")),
-    		eTag: gs_safeString(connection.getHeaderField("ETag")),
-    		location: gs_safeString(connection.getHeaderField("Location"))
+    		body: body
     	};
     };
     
@@ -221,32 +208,15 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
     	}
     };
     
-    var gs_graphPostJson = function(endpoint, token, payloadObject) {
-    	var payload = payloadObject === null || payloadObject === undefined ? "{}" : JSON.stringify(payloadObject);
-    	var result = gs_httpRequest("POST", endpoint, token, payload, "application/json", "application/json");
+    var gs_graphPutBinary = function(endpoint, token, payloadBytes, contentType) {
+    	var result = gs_httpRequestBinary("PUT", endpoint, token, payloadBytes, contentType, "application/json");
     	if (result.statusCode < 200 || result.statusCode >= 300) {
-    		throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
+    		throw new java.lang.RuntimeException("Graph upload failed (" + result.statusCode + "): " + result.body);
     	}
     	if (gs_isBlank(result.body)) {
     		return {};
     	}
     	return JSON.parse(result.body);
-    };
-    
-    var gs_graphUploadChunk = function(uploadUrl, payloadBytes, contentType, headers) {
-    	var result = gs_httpRequestBinary("PUT", uploadUrl, "", payloadBytes, contentType, "application/json", headers);
-    	var parsed = {};
-    	if (!gs_isBlank(result.body)) {
-    		parsed = JSON.parse(result.body);
-    	}
-    	return {
-    		statusCode: result.statusCode,
-    		body: result.body,
-    		bodyObject: parsed,
-    		contentRange: result.contentRange,
-    		eTag: result.eTag,
-    		location: result.location
-    	};
     };
     
     var gs_acquireAppToken = function(tenantIdValue, clientIdValue, clientSecretValue, scopeValue) {
@@ -499,23 +469,7 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
     	};
     };
     
-    var gs_resolveChunkSize = function(chunkSizeValue) {
-    	var minimumChunkSize = 327680;
-    	var maximumChunkSize = 62914560;
-    	var resolved = gs_parseInteger("chunkSize", chunkSizeValue, 3276800);
-    	if (resolved < minimumChunkSize) {
-    		resolved = minimumChunkSize;
-    	}
-    	if (resolved > maximumChunkSize) {
-    		resolved = maximumChunkSize;
-    	}
-    	if ((resolved % minimumChunkSize) !== 0) {
-    		throw new java.lang.IllegalArgumentException("chunkSize must be a multiple of 327680 bytes");
-    	}
-    	return resolved;
-    };
-    
-    var graphOperation = "upload_drive_item_large_content";
+    var graphOperation = "upload_drive_item_content";
     var requiredPermission = "Files.ReadWrite.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
@@ -526,7 +480,6 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
     
     	var includeRaw = gs_toBoolean(includeRawItem, false);
     	var shouldReturnUploadedItem = gs_toBoolean(returnUploadedItem, true);
-    	var includeSession = gs_toBoolean(includeSessionDetails, false);
     	var selectedFields = gs_splitCsv(selectFields);
     	var explicitItemId = gs_safeString(itemId);
     	var requestedParentId = gs_safeString(parentItemId);
@@ -534,14 +487,6 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
     	var targetFileName = gs_safeString(fileName);
     	var binaryContent = gs_decodeBase64("contentBase64", contentBase64);
     	var resolvedContentType = gs_defaultString(contentType, "application/octet-stream");
-    	var resolvedChunkSize = gs_resolveChunkSize(chunkSize);
-    	var resolvedConflictBehavior = gs_defaultString(conflictBehavior, "replace").toLowerCase();
-    	if (resolvedConflictBehavior !== "replace" && resolvedConflictBehavior !== "rename" && resolvedConflictBehavior !== "fail") {
-    		throw new java.lang.IllegalArgumentException("conflictBehavior must be one of: replace, rename, fail");
-    	}
-    	if (binaryContent.length < 1) {
-    		throw new java.lang.IllegalArgumentException("contentBase64 cannot be empty");
-    	}
     
     	var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
     	var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
@@ -549,81 +494,29 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
     	var resolvedList = resolvedDriveData.list;
     
     	var uploadTarget = "";
-    	var uploadSessionEndpoint = "";
-    	var uploadSessionPayload = null;
+    	var uploadUrl = "";
     	if (!gs_isBlank(explicitItemId)) {
     		if (String(explicitItemId).toLowerCase() === "root") {
     			throw new java.lang.IllegalArgumentException("Uploading on drive root is not allowed. Provide a file item id.");
     		}
     		uploadTarget = "item";
-    		uploadSessionEndpoint =
+    		uploadUrl =
     			"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
-    			"/items/" + gs_encodePathSegment(explicitItemId) + "/createUploadSession";
-    		uploadSessionPayload = {};
+    			"/items/" + gs_encodePathSegment(explicitItemId) + "/content";
     	} else {
     		targetFileName = gs_require("fileName", fileName).trim();
     		if (targetFileName.length === 0) {
     			throw new java.lang.IllegalArgumentException("fileName cannot be empty");
     		}
     		uploadTarget = "parent";
-    		uploadSessionEndpoint =
+    		uploadUrl =
     			"https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(resolvedDrive.driveId) +
     			(gs_isBlank(requestedParentId) || String(requestedParentId).toLowerCase() === "root"
-    				? "/root:/" + gs_encodePathSegment(targetFileName) + ":/createUploadSession"
-    				: "/items/" + gs_encodePathSegment(requestedParentId) + ":/" + gs_encodePathSegment(targetFileName) + ":/createUploadSession");
-    		uploadSessionPayload = {
-    			item: {
-    				"@microsoft.graph.conflictBehavior": resolvedConflictBehavior,
-    				name: targetFileName
-    			}
-    		};
+    				? "/root:/" + gs_encodePathSegment(targetFileName) + ":/content"
+    				: "/items/" + gs_encodePathSegment(requestedParentId) + ":/" + gs_encodePathSegment(targetFileName) + ":/content");
     	}
     
-    	var uploadSession = gs_graphPostJson(uploadSessionEndpoint, tokenInfo.token, uploadSessionPayload);
-    	var uploadUrl = gs_require("uploadUrl", uploadSession.uploadUrl);
-    	var expirationDateTime = gs_safeString(uploadSession.expirationDateTime);
-    	var nextExpectedRanges = uploadSession.nextExpectedRanges instanceof Array ? uploadSession.nextExpectedRanges : [];
-    
-    	var offset = 0;
-    	var chunkCount = 0;
-    	var finalStatusCode = 0;
-    	var finalItem = null;
-    	while (offset < binaryContent.length) {
-    		var chunkEndExclusive = offset + resolvedChunkSize;
-    		if (chunkEndExclusive > binaryContent.length) {
-    			chunkEndExclusive = binaryContent.length;
-    		}
-    
-    		var chunkStart = offset;
-    		var chunkEndInclusive = chunkEndExclusive - 1;
-    		var chunkBytes = java.util.Arrays.copyOfRange(binaryContent, chunkStart, chunkEndExclusive);
-    		var chunkHeaders = {
-    			"Content-Length": String(chunkBytes.length),
-    			"Content-Range": "bytes " + chunkStart + "-" + chunkEndInclusive + "/" + binaryContent.length
-    		};
-    
-    		var chunkResult = gs_graphUploadChunk(uploadUrl, chunkBytes, resolvedContentType, chunkHeaders);
-    		finalStatusCode = chunkResult.statusCode;
-    		chunkCount++;
-    
-    		if (chunkResult.statusCode === 200 || chunkResult.statusCode === 201) {
-    			finalItem = chunkResult.bodyObject;
-    			offset = binaryContent.length;
-    		} else if (chunkResult.statusCode === 202) {
-    			if (chunkResult.bodyObject && chunkResult.bodyObject.nextExpectedRanges instanceof Array) {
-    				nextExpectedRanges = chunkResult.bodyObject.nextExpectedRanges;
-    			}
-    			offset = chunkEndExclusive;
-    		} else {
-    			throw new java.lang.RuntimeException("Graph upload chunk failed (" + chunkResult.statusCode + "): " + chunkResult.body);
-    		}
-    	}
-    
-    	if (finalItem === null || finalItem === undefined) {
-    		throw new java.lang.RuntimeException("Upload session completed without final driveItem payload");
-    	}
-    
-    	var uploadedItem = gs_normalizeDriveItem(finalItem, includeRaw);
+    	var uploadedItem = gs_normalizeDriveItem(gs_graphPutBinary(uploadUrl, tokenInfo.token, binaryContent, resolvedContentType), includeRaw);
     	var uploadedItemId = gs_safeString(uploadedItem.itemId);
     	if (shouldReturnUploadedItem) {
     		var targetUploadedItemId = gs_require("uploadedItemId", uploadedItemId);
@@ -634,15 +527,6 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
     			getUrl = gs_appendQueryParam(getUrl, "$select", selectedFields.join(","));
     		}
     		uploadedItem = gs_normalizeDriveItem(gs_graphGetJson(getUrl, tokenInfo.token), includeRaw);
-    	}
-    
-    	var uploadSessionData = {};
-    	if (includeSession) {
-    		uploadSessionData = {
-    			uploadUrl: uploadUrl,
-    			expirationDateTime: expirationDateTime,
-    			nextExpectedRanges: nextExpectedRanges
-    		};
     	}
     
     	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
@@ -668,24 +552,18 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
     			itemId: explicitItemId,
     			parentItemId: normalizedParentId,
     			fileName: targetFileName,
-    			conflictBehavior: resolvedConflictBehavior,
     			contentType: resolvedContentType,
     			contentBytes: binaryContent.length,
-    			chunkSize: resolvedChunkSize,
-    			chunkCount: chunkCount,
-    			finalStatusCode: finalStatusCode,
     			returnUploadedItem: shouldReturnUploadedItem,
     			selectFields: selectedFields,
-    			includeRawItem: includeRaw,
-    			includeSessionDetails: includeSession
+    			includeRawItem: includeRaw
     		},
-    		uploadSession: uploadSessionData,
     		item: uploadedItem
     	});
     } catch (e) {
     	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
     }'
-↓response [steps.JsonToXmlStep-1772620998003]: 
+↓response [steps.JsonToXmlStep-1772719801998]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
     - xmlizable: 
@@ -699,98 +577,86 @@ comment: Uploads one SharePoint Online drive file using Graph upload session and
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
-↓siteId [variables.RequestableVariable-1772620998004]: 
+↓siteId [variables.RequestableVariable-1772719802035]: 
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
-↓siteHostname [variables.RequestableVariable-1772620998005]: 
+↓siteHostname [variables.RequestableVariable-1772719802078]: 
   comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
   description: SharePoint Online hostname
-↓sitePath [variables.RequestableVariable-1772620998006]: 
+↓sitePath [variables.RequestableVariable-1772719802129]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
   value: /sites/convertigo
-↓driveId [variables.RequestableVariable-1772620998007]: 
+↓driveId [variables.RequestableVariable-1772719802189]: 
   comment: Optional drive identifier. If provided, driveName/listId/listName are ignored.
   description: Optional Graph drive identifier
-↓driveName [variables.RequestableVariable-1772620998008]: 
+↓driveName [variables.RequestableVariable-1772719802256]: 
   comment: Drive name used to resolve driveId when driveId is not provided.
   description: SharePoint drive name
-↓listId [variables.RequestableVariable-1772620998009]: 
+↓listId [variables.RequestableVariable-1772719802333]: 
   comment: Optional list identifier used to resolve associated drive.
   description: Optional Graph list identifier
-↓listName [variables.RequestableVariable-1772620998010]: 
+↓listName [variables.RequestableVariable-1772719802417]: 
   comment: List display name or internal name used to resolve associated drive.
   description: SharePoint list name
-↓itemId [variables.RequestableVariable-1772620998011]: 
+↓itemId [variables.RequestableVariable-1772719802509]: 
   comment: Optional existing drive item id when uploading new content revision.
   description: Existing drive item id
-↓parentItemId [variables.RequestableVariable-1772620998012]: 
+↓parentItemId [variables.RequestableVariable-1772719802612]: 
   comment: Parent drive item id used when itemId is empty. Use root or leave empty for drive root.
   description: Parent drive item id
   value: root
-↓fileName [variables.RequestableVariable-1772620998013]: 
+↓fileName [variables.RequestableVariable-1772719802721]: 
   comment: File name used when itemId is empty.
   description: File name
-↓contentBase64 [variables.RequestableVariable-1772620998014]: 
-  comment: Base64 content uploaded through a Graph upload session.
+↓contentBase64 [variables.RequestableVariable-1772719802837]: 
+  comment: Base64 content to upload.
   description: Base64 file content
   required: true
-↓contentType [variables.RequestableVariable-1772620998015]: 
-  comment: Content type sent for each upload chunk.
+↓contentType [variables.RequestableVariable-1772719802960]: 
+  comment: Content type sent to Graph content endpoint.
   description: Content type
   value: application/octet-stream
-↓conflictBehavior [variables.RequestableVariable-1772620998029]: 
-  comment: Conflict behavior when creating a new file by path (replace, rename, fail).
-  description: Conflict behavior
-  value: replace
-↓chunkSize [variables.RequestableVariable-1772620998030]: 
-  comment: Chunk size in bytes (multiple of 327680). Default is 3276800.
-  description: Chunk size in bytes
-  value: 3276800
-↓returnUploadedItem [variables.RequestableVariable-1772620998016]: 
+↓returnUploadedItem [variables.RequestableVariable-1772719803092]: 
   comment: true reloads uploaded item with optional property selection before returning.
   description: Return uploaded item details
   value: true
-↓selectFields [variables.RequestableVariable-1772620998017]: 
+↓selectFields [variables.RequestableVariable-1772719803231]: 
   comment: Optional comma-separated list of Graph driveItem properties to select.
   description: Comma-separated property selection
-↓includeRawItem [variables.RequestableVariable-1772620998018]: 
+↓includeRawItem [variables.RequestableVariable-1772719803371]: 
   comment: true includes raw Graph driveItem payload under response.data.item.raw.
   description: Include raw Graph payload
   value: false
-↓includeSessionDetails [variables.RequestableVariable-1772620998031]: 
-  comment: true includes uploadUrl and upload session metadata in the response.
-  description: Include upload session details
-  value: false
-↓accessToken [variables.RequestableVariable-1772620998019]: 
+↓accessToken [variables.RequestableVariable-1772719803519]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
-↓tenantId [variables.RequestableVariable-1772620998020]: 
+↓tenantId [variables.RequestableVariable-1772719803676]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
   value: ${Microsoft_AzGraph.tenantId}
-↓clientId [variables.RequestableVariable-1772620998021]: 
+↓clientId [variables.RequestableVariable-1772719803844]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
   value: ${Microsoft_AzGraph.clientId}
-↓clientSecret [variables.RequestableVariable-1772620998022]: 
+↓clientSecret [variables.RequestableVariable-1772719804025]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
   value: 
     - ↑ciphered: true
     - ↑traceable: false
-    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+    - →→: xd8e180806a1c1d83a6255212121ab827
   visibility: '-1'
-↓TC_UploadDriveItemLargeContent [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772620998023]: 
+↓TC_UploadDriveItemContent [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772719805833]: 
     value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772620998024]: 
+  ↓sitePath [variables.TestCaseVariable-1772719805867]: 
     value: /sites/test1
-  ↓driveName [variables.TestCaseVariable-1772620998025]: 
+  ↓driveName [variables.TestCaseVariable-1772719805897]: 
     value: Documents
-  ↓parentItemId [variables.TestCaseVariable-1772620998026]: 
+  ↓parentItemId [variables.TestCaseVariable-1772719805935]: 
     value: root
-  ↓fileName [variables.TestCaseVariable-1772620998027]: 
+  ↓fileName [variables.TestCaseVariable-1772719805982]: 
     value: upload-from-convertigo.txt
-  ↓contentBase64 [variables.TestCaseVariable-1772620998028]: 
+  ↓contentBase64 [variables.TestCaseVariable-1772719806035]: 
     value: SGVsbG8gZnJvbSBDb252ZXJ0aWdvIQ==

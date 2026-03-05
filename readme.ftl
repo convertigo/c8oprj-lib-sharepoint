@@ -211,26 +211,58 @@ In a standard deployment, they are configured once on the server and not passed 
 <tr><td><code><#noparse>${Microsoft_AzGraph.tenantId}</#noparse></code></td><td>Yes (app-only)</td><td>No</td><td>Azure Entra tenant ID.</td></tr>
 <tr><td><code><#noparse>${Microsoft_AzGraph.clientId}</#noparse></code></td><td>Yes (app-only)</td><td>No</td><td>Application (client) ID.</td></tr>
 <tr><td><code><#noparse>${Microsoft_AzGraph.clientSecret.secret}</#noparse></code></td><td>Yes (app-only)</td><td>Yes</td><td>Application client secret.</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.provider}</#noparse></code></td><td>No</td><td>No</td><td>Default backend provider for routed sequences: <code>graph</code> or <code>onprem</code> (default fallback is <code>graph</code>).</td></tr>
 </table>
+
+<@header toc=toc anchors=anchors heading="###" text="On-Prem Symbols" />
+These symbols are optional and used by routed sequences (`provider=onprem`) when values are not passed in the request.
+
+<table>
+<tr><th>Symbol</th><th>Required</th><th>Secret</th><th>Purpose</th></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}</#noparse></code></td><td>Recommended</td><td>No</td><td>Base URL of on-prem site (example: <code>https://sharepoint.local/sites/intranet</code>).</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.username}</#noparse></code></td><td>Optional</td><td>No</td><td>Technical username for basic auth.</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.password.secret}</#noparse></code></td><td>Optional</td><td>Yes</td><td>Technical password for basic auth.</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.cookieHeader.secret}</#noparse></code></td><td>Optional</td><td>Yes</td><td>Cookie header for forms auth (FedAuth/rtFa).</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.http.server}</#noparse></code></td><td>Optional</td><td>No</td><td>On-prem HTTP connector host (default <code>sharepoint.local</code>).</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.http.port}</#noparse></code></td><td>Optional</td><td>No</td><td>On-prem HTTP connector port (default <code>443</code>).</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.http.https}</#noparse></code></td><td>Optional</td><td>No</td><td>Use HTTPS for on-prem HTTP connector (default <code>true</code>).</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.http.baseDir}</#noparse></code></td><td>Optional</td><td>No</td><td>On-prem HTTP connector base path (default <code>/</code>).</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.http.trustAll}</#noparse></code></td><td>Optional</td><td>No</td><td>Trust all TLS certificates in on-prem HTTP connector (default <code>true</code>).</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.http.defaultSubDir}</#noparse></code></td><td>Optional</td><td>No</td><td>Default transaction sub path for connector transactions (default <code>/_api/web</code>).</td></tr>
+</table>
+These `onPrem.http.*` symbols are used by connector `sharepointOnPremHttp`.
 
 	<@header toc=toc anchors=anchors heading="##" text="Authentication Model" />
 - Default mode (recommended for backend use): rely on server-side symbols (`tenantId`, `clientId`, `clientSecret`) and do not pass credentials in calls.
 - Delegated mode: pass `accessToken`; tenant/client/secret are ignored.
 - Application override: leave `accessToken` empty and pass tenant/client/secret explicitly when needed.
-- All online Graph sequences are `Hidden` and `authenticatedContextRequired=true`.
+- Routed public sequences switch backend with `provider` (`graph` or `onprem`), defaulting to `graph`.
+- Graph implementation sequences are `Hidden` and `authenticatedContextRequired=true`.
 - Sequence responses expose `tokenMode` (`delegated` or `application`) for diagnostics.
+- On-prem routed operations support bearer token, basic auth, or cookie-based auth, and write operations automatically request SharePoint FormDigest via `/_api/contextinfo`.
+- On-prem logic is executed directly from routed public sequences through shared JS helpers (no internal `OnPrem*` sequences).
+- Connector `sharepointOnPremHttp` is now used by shared on-prem helper `spop_httpRequest` for all routed GET/POST calls (JSON/text and binary content).
+- On-prem HTTP execution is connector-only (no direct HTTP fallback in helper code).
+
+	<@header toc=toc anchors=anchors heading="##" text="On-Prem API Coverage" />
+- Site/list resolvers: `ResolveSite`, `ResolveList`, `ResolveLibrary` with `provider=onprem`.
+- On-prem discovery lists: `ListSiteLists`, `ListSiteDrives` with `provider=onprem`.
+- List CRUD: `ListGetItems`, `GetListItem`, `CreateListItem`, `UpdateListItem`, `DeleteListItem` with `provider=onprem`.
+- File/folder APIs: `ListItems`, `UploadItemContent`, `DownloadItemContent`, `DeleteItem`, `ListItemVersions`, `RestoreItemVersion`, `MoveItem`, `CopyItem`, `CreateFolder` with `provider=onprem`.
+- Share block (`CreateShareLink`, `InviteItemRecipients`, `ListItemPermissions`, `DeleteItemPermission`) stays routed but returns explicit `not_supported_onprem` fallback in on-prem mode.
+- Not covered in on-prem mode: Graph batch, Graph subscriptions.
 
 	<@header toc=toc anchors=anchors heading="##" text="Endpoint-Only Test Calls" />
 Minimal example with testcase injection:
 ```bash
-curl 'http://localhost:18080/convertigo/projects/lib_Sharepoint/.json' \
+curl 'http://localhost:18080/convertigo/projects/lib_Microsoft_Sharepoint/.json' \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   --data-raw '__sequence=ResolveSite&__testcase=TC_ResolveSite'
 ```
 
 Typical authenticated admin call (Convertigo Studio session):
 ```bash
-curl 'http://localhost:18080/convertigo/projects/lib_Sharepoint/.json' \
+curl 'http://localhost:18080/convertigo/projects/lib_Microsoft_Sharepoint/.json' \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   -H 'Admin-Instance: <admin-instance-id>' \
   -H 'x-xsrf-token: <xsrf-token>' \
@@ -260,7 +292,8 @@ Useful overrides:
 - ID-first pattern: provide `siteId` / `listId` / `driveId` directly to skip resolver lookups.
 - Drive resolution priority: `driveId` first, then list-based resolution (`listId`/`listName`), then `driveName`.
 - List operations use list item identifiers (`itemId` numeric string), while drive operations use Graph drive item identifiers (opaque string).
-- For large binary uploads, prefer `UploadDriveItemLargeContent`; for smaller payloads, `UploadDriveItemContent` is usually simpler.
+- For large binary uploads, prefer `UploadItemLargeContent`; for smaller payloads, `UploadItemContent` is usually simpler.
+- For routed on-prem calls (`provider=onprem`), drive-item id lookups are not available from Graph IDs: pass `onPremFileServerRelativeUrl` (or a server-relative `itemId`) for version and restore endpoints.
 
 	<@header toc=toc anchors=anchors heading="##" text="Required Azure Permissions" />
 Grant Microsoft Graph **Application** permissions, then click `Grant admin consent`.
@@ -268,10 +301,13 @@ Grant Microsoft Graph **Application** permissions, then click `Grant admin conse
 <table>
 <tr><th>Functional scope</th><th>Sequences</th><th>Graph permissions (Application)</th><th>Notes</th></tr>
 <tr><td>Site and list discovery/read</td><td><code>ResolveSite</code>, <code>ResolveList</code>, <code>ListGetItems</code>, <code>GetListItem</code></td><td><code>Sites.Read.All</code> (or <code>Sites.ReadWrite.All</code>)</td><td>Use <code>Sites.ReadWrite.All</code> when list write operations are required.</td></tr>
-<tr><td>Drive discovery/read</td><td><code>ResolveDrive</code>, <code>ListDriveItems</code>, <code>GetDriveItem</code>, <code>DownloadDriveItemContent</code>, <code>ListDriveItemPermissions</code></td><td><code>Files.Read.All</code> + <code>Sites.Read.All</code> (or write variants)</td><td>Some tenants require both Files and Sites scopes for drive metadata traversal.</td></tr>
+<tr><td>Drive discovery/read</td><td><code>ResolveLibrary</code>, <code>ListItems</code>, <code>GetItem</code>, <code>DownloadItemContent</code>, <code>ListItemPermissions</code></td><td><code>Files.Read.All</code> + <code>Sites.Read.All</code> (or write variants)</td><td>Some tenants require both Files and Sites scopes for drive metadata traversal.</td></tr>
+<tr><td>Delta and versions read</td><td><code>ListSiteLists</code>, <code>ListSiteDrives</code>, <code>ListGetItemsDelta</code>, <code>ListItemsDelta</code>, <code>ListItemVersions</code>, <code>GetCopyItemOperation</code></td><td><code>Sites.Read.All</code> and/or <code>Files.Read.All</code> (or write variants)</td><td>Delta links are incremental cursors that must be persisted by caller code.</td></tr>
 <tr><td>List write operations</td><td><code>CreateListItem</code>, <code>UpdateListItem</code>, <code>DeleteListItem</code></td><td><code>Sites.ReadWrite.All</code></td><td>Targets SharePoint list items through <code>/sites/{siteId}/lists/{listId}</code>.</td></tr>
-<tr><td>Drive write operations</td><td><code>CreateDriveFolder</code>, <code>UpdateDriveItem</code>, <code>DeleteDriveItem</code>, <code>MoveDriveItem</code>, <code>CopyDriveItem</code>, <code>UploadDriveItemContent</code>, <code>UploadDriveItemLargeContent</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td><td><code>CopyDriveItem</code> is asynchronous and returns a monitor URL.</td></tr>
-<tr><td>Sharing and permission updates</td><td><code>CreateDriveItemShareLink</code>, <code>InviteDriveItemRecipients</code>, <code>DeleteDriveItemPermission</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td><td>Invite and link creation can also be constrained by SharePoint external sharing policy.</td></tr>
+<tr><td>Drive write operations</td><td><code>CreateFolder</code>, <code>UpdateItem</code>, <code>DeleteItem</code>, <code>MoveItem</code>, <code>CopyItem</code>, <code>UploadItemContent</code>, <code>UploadItemLargeContent</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td><td><code>CopyItem</code> is asynchronous and returns a monitor URL.</td></tr>
+<tr><td>Version restore</td><td><code>RestoreItemVersion</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td><td>Restoring versions can create additional versions depending on library retention policies.</td></tr>
+<tr><td>Sharing and permission updates</td><td><code>CreateShareLink</code>, <code>InviteItemRecipients</code>, <code>DeleteItemPermission</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td><td>Invite and link creation can also be constrained by SharePoint external sharing policy.</td></tr>
+<tr><td>Graph subscriptions and batch</td><td><code>CreateGraphSubscription</code>, <code>DeleteGraphSubscription</code>, <code>ExecuteGraphBatch</code></td><td>Depends on subscribed/batched resources</td><td>Subscription creation requires a reachable HTTPS notification endpoint.</td></tr>
 <tr><td>Token helper</td><td><code>GetGraphAccessToken</code></td><td>No direct Graph API call</td><td>Acquires token from Entra ID; downstream sequence still needs Graph roles.</td></tr>
 <tr><td>Local tooling</td><td><code>BuildGraphFlatJar</code></td><td>None</td><td>Builds local SDK JAR, no online call.</td></tr>
 </table>
@@ -283,33 +319,45 @@ Grant Microsoft Graph **Application** permissions, then click `Grant admin conse
 <tr><td><code>GetGraphAccessToken</code></td><td>None direct; downstream usually <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
 <tr><td><code>ResolveSite</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
 <tr><td><code>ResolveList</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>ResolveDrive</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code> + <code>Files.Read.All</code> or <code>Files.ReadWrite.All</code></td></tr>
+<tr><td><code>ResolveLibrary</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code> + <code>Files.Read.All</code> or <code>Files.ReadWrite.All</code></td></tr>
 <tr><td><code>ListGetItems</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
 <tr><td><code>GetListItem</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
 <tr><td><code>CreateListItem</code></td><td><code>Sites.ReadWrite.All</code></td></tr>
 <tr><td><code>UpdateListItem</code></td><td><code>Sites.ReadWrite.All</code></td></tr>
 <tr><td><code>DeleteListItem</code></td><td><code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>ListDriveItems</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>GetDriveItem</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>DownloadDriveItemContent</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>CreateDriveFolder</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>UpdateDriveItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>DeleteDriveItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>MoveDriveItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>CopyDriveItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>UploadDriveItemContent</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>UploadDriveItemLargeContent</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>CreateDriveItemShareLink</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>InviteDriveItemRecipients</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>ListDriveItemPermissions</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
-<tr><td><code>DeleteDriveItemPermission</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ListItems</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>GetItem</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>DownloadItemContent</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>CreateFolder</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>UpdateItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>DeleteItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>MoveItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>CopyItem</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>UploadItemContent</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>UploadItemLargeContent</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>CreateShareLink</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>InviteItemRecipients</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ListItemPermissions</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>DeleteItemPermission</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ListSiteLists</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ListSiteDrives</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ListGetItemsDelta</code></td><td><code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ListItemsDelta</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>ListItemVersions</code></td><td><code>Files.Read.All</code> or <code>Files.ReadWrite.All</code> + <code>Sites.Read.All</code> or <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>RestoreItemVersion</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>GetCopyItemOperation</code></td><td><code>Files.ReadWrite.All</code> + <code>Sites.ReadWrite.All</code></td></tr>
+<tr><td><code>CreateGraphSubscription</code></td><td>Depends on subscribed resource</td></tr>
+<tr><td><code>DeleteGraphSubscription</code></td><td>Depends on subscribed resource</td></tr>
+<tr><td><code>ExecuteGraphBatch</code></td><td>Depends on batched requests</td></tr>
 </table>
 
 	<@header toc=toc anchors=anchors heading="##" text="Known Limitations" />
 - If app roles do not include SharePoint scopes, Graph returns `accessDenied` even if token acquisition succeeds.
 - `Sites.Selected` requires explicit grant on target sites; otherwise all calls return `403`.
 - List item identifiers (usually numeric strings) and drive item identifiers (Graph opaque ids) are different and not interchangeable.
-- `CopyDriveItem` returns an asynchronous monitor URL; completion must be polled by client code.
+- `CopyItem` returns an asynchronous monitor URL; completion must be polled by client code.
+- `CreateGraphSubscription` requires a publicly reachable HTTPS callback endpoint and Graph webhook validation handling.
+- `ExecuteGraphBatch` permissions are the union of all operations included in `batchJson.requests`.
 
 	<@header toc=toc anchors=anchors heading="##" text="Payload Examples" />
 `fieldsJson` example for `CreateListItem` / `UpdateListItem`:
@@ -320,7 +368,7 @@ Grant Microsoft Graph **Application** permissions, then click `Grant admin conse
 }
 ```
 
-`updateJson` example for `UpdateDriveItem`:
+`updateJson` example for `UpdateItem`:
 ```json
 {
   "name": "Renamed_document.docx",
@@ -328,7 +376,7 @@ Grant Microsoft Graph **Application** permissions, then click `Grant admin conse
 }
 ```
 
-`recipientsJson` example for `InviteDriveItemRecipients`:
+`recipientsJson` example for `InviteItemRecipients`:
 ```json
 [
   { "email": "user1@contoso.com" },
