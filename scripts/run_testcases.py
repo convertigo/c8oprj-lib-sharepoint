@@ -26,6 +26,7 @@ import datetime as dt
 import json
 import os
 import re
+import subprocess
 import sys
 import traceback
 import urllib.parse
@@ -99,14 +100,29 @@ elif AZ_TENANT_ID and AZ_CLIENT_ID and AZ_CLIENT_SECRET:
 else:
     TOKEN_MODE = "server_symbols_or_defaults"
 
+TEST_PROVIDER = _env("TEST_PROVIDER", "").strip().lower()
+if TEST_PROVIDER not in {"", "graph", "onprem", "both"}:
+    raise RuntimeError("Invalid TEST_PROVIDER. Expected one of: graph, onprem, both, or empty")
+ONPREM_SITE_BASE_URL = _env("ONPREM_SITE_BASE_URL", "")
+ONPREM_PROTOCOL = _env("ONPREM_PROTOCOL", "")
+ONPREM_USERNAME = _env("ONPREM_USERNAME", "")
+ONPREM_PASSWORD = _env("ONPREM_PASSWORD", "")
+ONPREM_COOKIE_HEADER = _env("ONPREM_COOKIE_HEADER", "")
+ONPREM_HTTP_SERVER = _env("ONPREM_HTTP_SERVER", "")
+
 # SharePoint test context.
 SITE_ID = _env("SITE_ID", "")
-SITE_HOSTNAME = _env("SITE_HOSTNAME", "convertigo.sharepoint.com")
-SITE_PATH = _env("SITE_PATH", "/sites/test1")
+SITE_HOSTNAME = _env("SITE_HOSTNAME", "")
+SITE_PATH = _env("SITE_PATH", "")
 LIST_ID = _env("LIST_ID", "")
-LIST_NAME = _env("LIST_NAME", "Web Template Extensions")
+LIST_NAME = _env("LIST_NAME", "")
 DRIVE_ID = _env("DRIVE_ID", "")
-DRIVE_NAME = _env("DRIVE_NAME", "Documents")
+DRIVE_NAME = _env("DRIVE_NAME", "")
+
+GRAPH_DEFAULT_SITE_HOSTNAME = "convertigo.sharepoint.com"
+GRAPH_DEFAULT_SITE_PATH = "/sites/test1"
+GRAPH_DEFAULT_LIST_NAME = "Web Template Extensions"
+GRAPH_DEFAULT_DRIVE_NAME = "Documents"
 
 EXISTING_LIST_ITEM_ID = _env("EXISTING_LIST_ITEM_ID", "")
 FALLBACK_LIST_ITEM_ID = _env("FALLBACK_LIST_ITEM_ID", "8")
@@ -152,6 +168,81 @@ def _parse_form_pairs(raw_pairs: str) -> Dict[str, str]:
         if key:
             parsed[key] = value
     return parsed
+
+
+def _report_file_for_mode(base_report_file: str, mode: str) -> str:
+    root, ext = os.path.splitext(base_report_file)
+    if ext == "":
+        ext = ".json"
+    return f"{root}-{mode}{ext}"
+
+
+def _run_both_provider_modes() -> int:
+    script_path = os.path.abspath(__file__)
+    providers = ["graph", "onprem"]
+    run_outcomes: Dict[str, int] = {}
+    run_reports: Dict[str, str] = {}
+    combined_runs: Dict[str, Any] = {}
+
+    for provider in providers:
+        mode_report = _report_file_for_mode(REPORT_FILE, provider)
+        env = os.environ.copy()
+        env["TEST_PROVIDER"] = provider
+        env["REPORT_FILE"] = mode_report
+        print(f"=== Running provider mode: {provider} ===")
+        completed = subprocess.run([sys.executable, script_path], env=env)
+        run_outcomes[provider] = int(completed.returncode)
+        run_reports[provider] = mode_report
+        if os.path.isfile(mode_report):
+            try:
+                with open(mode_report, "r", encoding="utf-8") as f:
+                    combined_runs[provider] = json.load(f)
+            except Exception as exc:
+                combined_runs[provider] = {"reportReadError": str(exc), "reportFile": mode_report}
+        print()
+
+    combined_summary = {
+        "total": 0,
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "mandatoryFailed": 0,
+    }
+    for provider in providers:
+        run_payload = combined_runs.get(provider, {})
+        summary = run_payload.get("summary") if isinstance(run_payload, dict) else None
+        if isinstance(summary, dict):
+            combined_summary["total"] += int(summary.get("total", 0))
+            combined_summary["passed"] += int(summary.get("passed", 0))
+            combined_summary["failed"] += int(summary.get("failed", 0))
+            combined_summary["skipped"] += int(summary.get("skipped", 0))
+            combined_summary["mandatoryFailed"] += int(summary.get("mandatoryFailed", 0))
+
+    combined_payload = {
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "project": C8O_PROJECT,
+        "baseUrl": C8O_BASE_URL,
+        "tokenMode": TOKEN_MODE,
+        "providerMode": "both",
+        "runs": combined_runs,
+        "runReports": run_reports,
+        "runExitCodes": run_outcomes,
+        "summary": combined_summary,
+    }
+    os.makedirs(os.path.dirname(REPORT_FILE) or ".", exist_ok=True)
+    with open(REPORT_FILE, "w", encoding="utf-8") as f:
+        json.dump(combined_payload, f, indent=2, ensure_ascii=False)
+
+    print("Combined provider run summary")
+    print(
+        "Summary: total={total} pass={passed} fail={failed} skip={skipped} mandatoryFail={mandatoryFailed}".format(
+            **combined_summary
+        )
+    )
+    print("Run exit codes: " + ", ".join([f"{k}={v}" for k, v in run_outcomes.items()]))
+    print(f"Combined report: {REPORT_FILE}")
+
+    return 1 if any(code != 0 for code in run_outcomes.values()) else 0
 
 
 def _decode_payload(raw: str) -> Dict[str, Any]:
@@ -303,6 +394,49 @@ def _first_non_empty(*values: Any) -> str:
         if text != "":
             return text
     return ""
+
+
+def _normalize_site_path(path_value: str, fallback: str) -> str:
+    path = _first_non_empty(path_value, fallback, "/")
+    if not path.startswith("/"):
+        path = "/" + path
+    if len(path) > 1 and path.endswith("/"):
+        path = path[:-1]
+    return path
+
+
+def _resolve_scope_defaults(is_onprem_mode: bool) -> Dict[str, str]:
+    hostname = SITE_HOSTNAME.strip()
+    path = SITE_PATH.strip()
+    list_name = LIST_NAME.strip()
+    drive_name = DRIVE_NAME.strip()
+
+    if is_onprem_mode:
+        if ONPREM_SITE_BASE_URL.strip() != "":
+            try:
+                parsed = urllib.parse.urlparse(ONPREM_SITE_BASE_URL.strip())
+                if hostname == "" and parsed.hostname:
+                    hostname = str(parsed.hostname)
+                if path == "" and parsed.path:
+                    path = str(parsed.path)
+            except Exception:
+                pass
+        if hostname == "":
+            hostname = ONPREM_HTTP_SERVER.strip()
+        if path != "":
+            path = _normalize_site_path(path, "/")
+    else:
+        hostname = _first_non_empty(hostname, GRAPH_DEFAULT_SITE_HOSTNAME)
+        path = _normalize_site_path(path, GRAPH_DEFAULT_SITE_PATH)
+        list_name = _first_non_empty(list_name, GRAPH_DEFAULT_LIST_NAME)
+        drive_name = _first_non_empty(drive_name, GRAPH_DEFAULT_DRIVE_NAME)
+
+    return {
+        "siteHostname": hostname,
+        "sitePath": path,
+        "listName": list_name,
+        "driveName": drive_name,
+    }
 
 
 def _extract_item_id_from_object(obj: Any) -> str:
@@ -474,15 +608,27 @@ class TestPlan:
             "project": C8O_PROJECT,
             "baseUrl": C8O_BASE_URL,
             "site": {
-                "siteId": SITE_ID,
-                "siteHostname": SITE_HOSTNAME,
-                "sitePath": SITE_PATH,
-                "listId": LIST_ID,
-                "listName": LIST_NAME,
-                "driveId": DRIVE_ID,
-                "driveName": DRIVE_NAME,
+                "siteId": self.ctx.get("site_id", SITE_ID),
+                "siteHostname": self.ctx.get("site_hostname", SITE_HOSTNAME),
+                "sitePath": self.ctx.get("site_path", SITE_PATH),
+                "listId": self.ctx.get("list_id", LIST_ID),
+                "listName": self.ctx.get("list_name", LIST_NAME),
+                "driveId": self.ctx.get("drive_id", DRIVE_ID),
+                "driveName": self.ctx.get("drive_name", DRIVE_NAME),
             },
             "tokenMode": TOKEN_MODE,
+            "providerMode": {
+                "forcedProvider": TEST_PROVIDER,
+                "resolved": TEST_PROVIDER if TEST_PROVIDER else "symbol/default",
+                "onPremOverrides": {
+                    "siteBaseUrl": ONPREM_SITE_BASE_URL,
+                    "httpServer": ONPREM_HTTP_SERVER,
+                    "protocol": ONPREM_PROTOCOL if TEST_PROVIDER == "onprem" else "",
+                    "hasUsername": bool(ONPREM_USERNAME.strip()),
+                    "hasPassword": bool(ONPREM_PASSWORD.strip()),
+                    "hasCookieHeader": bool(ONPREM_COOKIE_HEADER.strip()),
+                },
+            },
             "convertigoSession": {
                 "hasJSessionId": bool(SESSION.get("jsessionid")),
                 "hasXAuthToken": bool(SESSION.get("xauth")),
@@ -513,7 +659,21 @@ class TestPlan:
 
 
 def main() -> int:
+    if TEST_PROVIDER == "both":
+        return _run_both_provider_modes()
+
     plan = TestPlan()
+    is_forced_provider = TEST_PROVIDER != ""
+    is_onprem_mode = TEST_PROVIDER == "onprem"
+    resolved_scope = _resolve_scope_defaults(is_onprem_mode)
+    resolved_site_hostname = resolved_scope["siteHostname"]
+    resolved_site_path = resolved_scope["sitePath"]
+    resolved_list_name = resolved_scope["listName"]
+    resolved_drive_name = resolved_scope["driveName"]
+    plan.ctx["site_hostname"] = resolved_site_hostname
+    plan.ctx["site_path"] = resolved_site_path
+    plan.ctx["list_name"] = resolved_list_name
+    plan.ctx["drive_name"] = resolved_drive_name
     ts = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S")
     folder_name = f"C8O_plan_folder_{ts}"
     file_name = f"c8o-plan-file-{ts}.txt"
@@ -534,6 +694,14 @@ def main() -> int:
     print(f"Logical test plan for project {C8O_PROJECT}")
     print(f"Base URL: {C8O_BASE_URL}")
     print(f"Token mode: {TOKEN_MODE}")
+    print(f"Provider mode: {TEST_PROVIDER if is_forced_provider else 'symbol/default'}")
+    resolved_scope_host = resolved_site_hostname if resolved_site_hostname != "" else "<sequence default>"
+    resolved_scope_path = resolved_site_path if resolved_site_path != "" else "<sequence default>"
+    resolved_scope_list = resolved_list_name if resolved_list_name != "" else "<sequence default>"
+    resolved_scope_drive = resolved_drive_name if resolved_drive_name != "" else "<sequence default>"
+    print(
+        f"Scope: host={resolved_scope_host} path={resolved_scope_path} list={resolved_scope_list} drive={resolved_scope_drive}"
+    )
     if SESSION.get("jsessionid", ""):
         print("Convertigo session: provided by environment")
     elif C8O_AUTO_LOGIN:
@@ -544,22 +712,38 @@ def main() -> int:
     print()
 
     def site_scope() -> Dict[str, Any]:
-        return {
-            "siteId": plan.ctx.get("site_id", ""),
-            "siteHostname": SITE_HOSTNAME,
-            "sitePath": SITE_PATH,
-        }
+        payload: Dict[str, Any] = {"siteId": plan.ctx.get("site_id", "")}
+        if resolved_site_hostname != "":
+            payload["siteHostname"] = resolved_site_hostname
+        if resolved_site_path != "":
+            payload["sitePath"] = resolved_site_path
+        if is_forced_provider:
+            payload["provider"] = TEST_PROVIDER
+        if is_onprem_mode:
+            if ONPREM_SITE_BASE_URL.strip() != "":
+                payload["siteBaseUrl"] = ONPREM_SITE_BASE_URL
+            if ONPREM_PROTOCOL.strip() != "":
+                payload["onPremProtocol"] = ONPREM_PROTOCOL
+            if ONPREM_USERNAME.strip() != "":
+                payload["onPremUsername"] = ONPREM_USERNAME
+            if ONPREM_PASSWORD.strip() != "":
+                payload["onPremPassword"] = ONPREM_PASSWORD
+            if ONPREM_COOKIE_HEADER.strip() != "":
+                payload["cookieHeader"] = ONPREM_COOKIE_HEADER
+        return payload
 
     def list_scope() -> Dict[str, Any]:
         payload = site_scope()
         payload["listId"] = plan.ctx.get("list_id", "")
-        payload["listName"] = LIST_NAME
+        if resolved_list_name != "":
+            payload["listName"] = resolved_list_name
         return payload
 
     def drive_scope() -> Dict[str, Any]:
         payload = site_scope()
         payload["driveId"] = plan.ctx.get("drive_id", "")
-        payload["driveName"] = DRIVE_NAME
+        if resolved_drive_name != "":
+            payload["driveName"] = resolved_drive_name
         return payload
 
     def save_site(payload: Dict[str, Any], ctx: Dict[str, Any]) -> None:
@@ -636,7 +820,8 @@ def main() -> int:
         "GetGraphAccessToken",
         "GetGraphAccessToken",
         {"includeTokenPayload": "false"},
-        mandatory=True,
+        mandatory=not is_onprem_mode,
+        enabled=not is_onprem_mode,
         on_success=save_graph_access_token,
     )
     plan.run_step(
@@ -700,7 +885,8 @@ def main() -> int:
             ),
             "includeRawResponse": "false",
         },
-        mandatory=True,
+        mandatory=not is_onprem_mode,
+        enabled=not is_onprem_mode,
         on_success=save_batch,
     )
 
@@ -719,6 +905,7 @@ def main() -> int:
         "ListGetItemsDelta",
         dict(list_scope(), top="10", maxPages="1", expandFields="true"),
         mandatory=False,
+        enabled=not is_onprem_mode,
         on_success=save_list_delta,
     )
     plan.run_step(
@@ -779,6 +966,7 @@ def main() -> int:
         "ListItemsDelta",
         dict(drive_scope(), parentItemId="root", top="20", maxPages="1"),
         mandatory=False,
+        enabled=not is_onprem_mode,
         on_success=save_drive_delta,
     )
     plan.run_step(
@@ -934,7 +1122,7 @@ def main() -> int:
             includeResourceData="false",
         ),
         mandatory=False,
-        enabled=RUN_SUBSCRIPTION_OPERATIONS and SUBSCRIPTION_NOTIFICATION_URL.strip() != "",
+        enabled=(not is_onprem_mode) and RUN_SUBSCRIPTION_OPERATIONS and SUBSCRIPTION_NOTIFICATION_URL.strip() != "",
         on_success=save_subscription,
     )
     plan.run_step(
@@ -943,7 +1131,9 @@ def main() -> int:
         "DeleteGraphSubscription",
         dict(subscriptionId=_first_non_empty(plan.ctx.get("subscription_id", ""), "")),
         mandatory=False,
-        enabled=RUN_SUBSCRIPTION_OPERATIONS and _first_non_empty(plan.ctx.get("subscription_id", ""), "") != "",
+        enabled=(not is_onprem_mode)
+        and RUN_SUBSCRIPTION_OPERATIONS
+        and _first_non_empty(plan.ctx.get("subscription_id", ""), "") != "",
     )
     plan.run_step(
         "phase-4-sharing",

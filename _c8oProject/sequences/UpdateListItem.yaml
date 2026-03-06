@@ -504,16 +504,18 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
 ↓siteHostname [variables.RequestableVariable-1772620911005]: 
   comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
   description: SharePoint hostname
+  value: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
 ↓sitePath [variables.RequestableVariable-1772620911006]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
-  value: /sites/convertigo
+  value: ${lib_Microsoft_Sharepoint.onPrem.sitePath=/sites/test}
 ↓listId [variables.RequestableVariable-1772620911007]: 
   comment: Optional list identifier. If provided, listName is ignored.
   description: Optional Graph list identifier
 ↓listName [variables.RequestableVariable-1772620911008]: 
   comment: List display name or internal name used to resolve listId.
   description: SharePoint list name
+  value: ${lib_Microsoft_Sharepoint.onPrem.listName=TestList}
 ↓itemId [variables.RequestableVariable-1772620911009]: 
   comment: Target SharePoint list item identifier.
   description: SharePoint list item id
@@ -564,7 +566,7 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
 ↓onPremProtocol [variables.RequestableVariable-1772714469228]: 
   comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
   description: On-prem protocol fallback
-  value: https
+  value: ${lib_Microsoft_Sharepoint.onPrem.protocol=https}
 ↓onPremUsername [variables.RequestableVariable-1772714469278]: 
   comment: Optional technical username for on-prem basic authentication.
   description: On-prem technical username
@@ -585,14 +587,27 @@ comment: Updates one SharePoint list item through Microsoft Graph (online) or Sh
     - ↑traceable: false
     - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb40524d13591840f063c4918706e203c3286f7945be3bd1a0c33cb44b7f24f9d492d4c
   visibility: '-1'
-↓TC_UpdateListItem [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772620911018]: 
+↓TC_UpdateListItem_Graph [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772804004298]: 
     value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772620911019]: 
+  ↓sitePath [variables.TestCaseVariable-1772804004322]: 
     value: /sites/test1
-  ↓listName [variables.TestCaseVariable-1772620911020]: 
+  ↓listName [variables.TestCaseVariable-1772804004356]: 
     value: Web Template Extensions
-  ↓itemId [variables.TestCaseVariable-1772620911021]: 
+  ↓itemId [variables.TestCaseVariable-1772804004397]: 
     value: '"8"'
-  ↓fieldsJson [variables.TestCaseVariable-1772620911022]: 
-    value: '{"Title":"Updated from Convertigo"}'
+  ↓fieldsJson [variables.TestCaseVariable-1772804004455]: 
+  ↓provider [variables.TestCaseVariable-1772804004511]: 
+    value: graph
+↓TC_UpdateListItem_OnPrem [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772804004907]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
+  ↓sitePath [variables.TestCaseVariable-1772804004935]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.sitePath=/sites/test}
+  ↓listName [variables.TestCaseVariable-1772804004971]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.listName=TestList}
+  ↓itemId [variables.TestCaseVariable-1772804005015]: 
+    value: '"8"'
+  ↓fieldsJson [variables.TestCaseVariable-1772804005075]: 
+  ↓provider [variables.TestCaseVariable-1772804005141]: 
+    value: onprem

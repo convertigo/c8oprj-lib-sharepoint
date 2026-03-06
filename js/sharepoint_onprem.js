@@ -12,6 +12,17 @@ function spop_defaultString(value, defaultValue) {
   return spop_isBlank(value) ? defaultValue : String(value);
 }
 
+function spop_isUnresolvedSymbol(value) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  return /^\$\{[^}]+\}$/.test(String(value).trim());
+}
+
+function spop_isConfiguredValue(value) {
+  return !spop_isBlank(value) && !spop_isUnresolvedSymbol(value);
+}
+
 function spop_require(name, value) {
   if (spop_isBlank(value)) {
     throw new java.lang.IllegalArgumentException("Missing required input: " + name);
@@ -184,7 +195,13 @@ function spop_buildSiteBaseUrl(siteBaseUrl, siteHostname, sitePath, protocol) {
   }
 
   var host = spop_require("siteHostname", siteHostname).trim();
-  var scheme = spop_defaultString(protocol, "https").trim().toLowerCase();
+  var rawScheme = spop_defaultString(protocol, "https").trim().toLowerCase();
+  var scheme = rawScheme;
+  if (rawScheme === "true" || rawScheme === "1") {
+    scheme = "https";
+  } else if (rawScheme === "false" || rawScheme === "0") {
+    scheme = "http";
+  }
   var path = spop_normalizeSitePath(spop_defaultString(sitePath, "/"));
   if (path === "/") {
     return scheme + "://" + host;
@@ -192,26 +209,160 @@ function spop_buildSiteBaseUrl(siteBaseUrl, siteHostname, sitePath, protocol) {
   return scheme + "://" + host + path;
 }
 
+function spop_normalizeConnectorAuthenticationType(value) {
+  if (!spop_isConfiguredValue(value)) {
+    return "none";
+  }
+  var normalized = String(value).trim().toLowerCase();
+  if (normalized === "basic" || normalized === "basicpreemptive" || normalized === "ntlm" || normalized === "anonymous") {
+    return normalized;
+  }
+  return "none";
+}
+
+function spop_getConnectorAuthenticationType() {
+  try {
+    if (typeof context !== "undefined" && context !== null && context.requestedObject && context.requestedObject.getProject) {
+      var projectObject = context.requestedObject.getProject();
+      if (projectObject !== null && projectObject !== undefined && projectObject.getConnectorByName) {
+        var connector = projectObject.getConnectorByName("sharepointOnPremHttp");
+        if (connector !== null && connector !== undefined && connector.getAuthenticationType) {
+          return spop_normalizeConnectorAuthenticationType(spop_safeString(connector.getAuthenticationType()));
+        }
+      }
+    }
+  } catch (ignoreConnectorAuthType) {
+  }
+  return "none";
+}
+
+function spop_getOnPremConnector() {
+  try {
+    if (typeof context !== "undefined" && context !== null && context.requestedObject && context.requestedObject.getProject) {
+      var projectObject = context.requestedObject.getProject();
+      if (projectObject !== null && projectObject !== undefined && projectObject.getConnectorByName) {
+        return projectObject.getConnectorByName("sharepointOnPremHttp");
+      }
+    }
+  } catch (ignoreConnectorLookup) {
+  }
+  return null;
+}
+
+function spop_normalizeNtlmTransportMode(value) {
+  var normalized = spop_defaultString(value, "").trim().toLowerCase();
+  if (normalized === "connector" || normalized === "connectoronly" || normalized === "connector_only") {
+    return "connector_only";
+  }
+  if (normalized === "httpclient" || normalized === "httpclientonly" || normalized === "httpclient_only") {
+    return "httpclient_only";
+  }
+  if (normalized === "httpclientthenconnector" || normalized === "httpclient_then_connector") {
+    return "httpclient_then_connector";
+  }
+  if (normalized === "connectorthenhttpclient" || normalized === "connector_then_httpclient" || normalized === "auto" || normalized === "hybrid" || normalized.length === 0) {
+    return "connector_then_httpclient";
+  }
+  return "connector_then_httpclient";
+}
+
+function spop_getNtlmTransportMode() {
+  var defaultMode = "connector_then_httpclient";
+  var connector = spop_getOnPremConnector();
+  if (connector === null || connector === undefined || !connector.getComment) {
+    return defaultMode;
+  }
+
+  var comment = spop_safeString(connector.getComment());
+  if (spop_isBlank(comment)) {
+    return defaultMode;
+  }
+
+  var marker = "ntlmTransportMode=";
+  var markerIndex = comment.indexOf(marker);
+  if (markerIndex < 0) {
+    return defaultMode;
+  }
+
+  var rawMode = comment.substring(markerIndex + marker.length);
+  var endIndex = rawMode.length;
+  var i;
+  for (i = 0; i < rawMode.length; i++) {
+    var current = rawMode.charAt(i);
+    if (current === " " || current === "\t" || current === "\r" || current === "\n" || current === ";" || current === "," || current === ")") {
+      endIndex = i;
+      break;
+    }
+  }
+  rawMode = rawMode.substring(0, endIndex).trim();
+  if (spop_isBlank(rawMode) || spop_isUnresolvedSymbol(rawMode)) {
+    return defaultMode;
+  }
+
+  return spop_normalizeNtlmTransportMode(rawMode);
+}
+
+function spop_splitDomainQualifiedUser(rawUser) {
+  var userValue = spop_safeString(rawUser).trim();
+  var result = {
+    hasDomain: false,
+    domain: "",
+    username: userValue
+  };
+  if (spop_isBlank(userValue)) {
+    return result;
+  }
+
+  var separatorIndex = userValue.indexOf("\\");
+  if (separatorIndex < 0) {
+    separatorIndex = userValue.indexOf("/");
+  }
+
+  if (separatorIndex > 0 && separatorIndex < userValue.length - 1) {
+    result.hasDomain = true;
+    result.domain = userValue.substring(0, separatorIndex);
+    result.username = userValue.substring(separatorIndex + 1);
+  }
+  return result;
+}
+
 function spop_buildAuth(accessToken, username, password, cookieHeader) {
   var auth = {
     mode: "onprem_anonymous",
-    headers: {}
+    headers: {},
+    connectorGivenUser: null,
+    connectorGivenPassword: null
   };
+  var connectorAuthenticationType = spop_getConnectorAuthenticationType();
 
-  if (!spop_isBlank(accessToken)) {
+  if (spop_isConfiguredValue(accessToken)) {
     auth.mode = "onprem_bearer";
     auth.headers.Authorization = "Bearer " + String(accessToken);
-  } else if (!spop_isBlank(username) && !spop_isBlank(password)) {
-    auth.mode = "onprem_basic";
-    var raw = String(username) + ":" + String(password);
-    var encoded = java.util.Base64.getEncoder().encodeToString(new java.lang.String(raw).getBytes("UTF-8"));
-    auth.headers.Authorization = "Basic " + String(encoded);
   }
 
-  if (!spop_isBlank(cookieHeader)) {
+  if (auth.mode !== "onprem_bearer" && spop_isConfiguredValue(cookieHeader)) {
+    auth.mode = "onprem_cookie";
     auth.headers.Cookie = String(cookieHeader);
-    if (auth.mode === "onprem_anonymous") {
-      auth.mode = "onprem_cookie";
+  } else if (auth.mode === "onprem_anonymous" && spop_isConfiguredValue(username) && spop_isConfiguredValue(password)) {
+    if (connectorAuthenticationType === "none" || connectorAuthenticationType === "anonymous") {
+      auth.mode = "onprem_basic";
+      var raw = String(username) + ":" + String(password);
+      var encoded = java.util.Base64.getEncoder().encodeToString(new java.lang.String(raw).getBytes("UTF-8"));
+      auth.headers.Authorization = "Basic " + String(encoded);
+    } else if (connectorAuthenticationType === "ntlm") {
+      auth.mode = "onprem_connector_ntlm";
+      auth.connectorGivenUser = String(username);
+      auth.connectorGivenPassword = String(password);
+    } else {
+      auth.mode = "onprem_connector_basic";
+      auth.connectorGivenUser = String(username);
+      auth.connectorGivenPassword = String(password);
+    }
+  } else if (auth.mode === "onprem_anonymous") {
+    if (connectorAuthenticationType === "ntlm") {
+      auth.mode = "onprem_connector_ntlm";
+    } else if (connectorAuthenticationType === "basic" || connectorAuthenticationType === "basicpreemptive") {
+      auth.mode = "onprem_connector_basic";
     }
   }
 
@@ -410,6 +561,152 @@ function spop_writeTempBinaryFile(payloadBytes) {
   return tempFile;
 }
 
+function spop_resolveNtlmCredentials(auth) {
+  var connector = spop_getOnPremConnector();
+  var username = "";
+  var password = "";
+  var domain = "";
+
+  if (connector !== null && connector !== undefined) {
+    if (connector.getAuthUser) {
+      username = spop_safeString(connector.getAuthUser());
+    }
+    if (connector.getAuthPassword) {
+      password = spop_safeString(connector.getAuthPassword());
+    }
+    if (connector.getNTLMAuthenticationDomain) {
+      domain = spop_safeString(connector.getNTLMAuthenticationDomain());
+    }
+  }
+
+  if (auth !== null && auth !== undefined) {
+    if (spop_isConfiguredValue(auth.connectorGivenUser)) {
+      username = String(auth.connectorGivenUser);
+    }
+    if (spop_isConfiguredValue(auth.connectorGivenPassword)) {
+      password = String(auth.connectorGivenPassword);
+    }
+  }
+
+  if (!spop_isConfiguredValue(domain)) {
+    domain = "";
+  }
+
+  var splitIdentity = spop_splitDomainQualifiedUser(username);
+  if (splitIdentity.hasDomain) {
+    if (!spop_isConfiguredValue(domain)) {
+      domain = splitIdentity.domain;
+    }
+    username = splitIdentity.username;
+  }
+
+  if (!spop_isConfiguredValue(username) || !spop_isConfiguredValue(password)) {
+    throw new java.lang.IllegalArgumentException("Missing NTLM credentials for on-prem connector mode");
+  }
+
+  return {
+    username: String(username),
+    password: String(password),
+    domain: String(domain)
+  };
+}
+
+function spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse) {
+  var credentials = spop_resolveNtlmCredentials(auth);
+  var normalizedMethod = spop_defaultString(method, "GET").trim().toUpperCase();
+  var mergedHeaders = spop_collectHeaders(auth, headers, accept, contentType);
+
+  var RequestConfig = Packages.org.apache.hc.client5.http.config.RequestConfig;
+  var StandardAuthScheme = Packages.org.apache.hc.client5.http.auth.StandardAuthScheme;
+  var BasicCredentialsProvider = Packages.org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
+  var AuthScope = Packages.org.apache.hc.client5.http.auth.AuthScope;
+  var NTCredentials = Packages.org.apache.hc.client5.http.auth.NTCredentials;
+  var HttpClients = Packages.org.apache.hc.client5.http.impl.classic.HttpClients;
+  var HttpGet = Packages.org.apache.hc.client5.http.classic.methods.HttpGet;
+  var HttpPost = Packages.org.apache.hc.client5.http.classic.methods.HttpPost;
+  var StringEntity = Packages.org.apache.hc.core5.http.io.entity.StringEntity;
+  var ByteArrayEntity = Packages.org.apache.hc.core5.http.io.entity.ByteArrayEntity;
+  var ContentType = Packages.org.apache.hc.core5.http.ContentType;
+  var EntityUtils = Packages.org.apache.hc.core5.http.io.entity.EntityUtils;
+
+  var requestConfig = RequestConfig.custom()
+    .setTargetPreferredAuthSchemes(java.util.Arrays.asList(StandardAuthScheme.NTLM, StandardAuthScheme.SPNEGO))
+    .build();
+
+  var credentialsProvider = new BasicCredentialsProvider();
+  var passwordChars = new java.lang.String(credentials.password).toCharArray();
+  credentialsProvider.setCredentials(
+    new AuthScope(null, -1),
+    new NTCredentials(credentials.username, passwordChars, null, credentials.domain)
+  );
+
+  var client = HttpClients.custom()
+    .setDefaultCredentialsProvider(credentialsProvider)
+    .setDefaultRequestConfig(requestConfig)
+    .build();
+
+  var request = null;
+  if (normalizedMethod === "GET") {
+    request = new HttpGet(String(endpoint));
+  } else if (normalizedMethod === "POST") {
+    request = new HttpPost(String(endpoint));
+  } else {
+    try {
+      client.close();
+    } catch (ignoreClientCloseMethod) {
+    }
+    throw new java.lang.IllegalArgumentException("Unsupported HTTP method for NTLM HttpClient5 path: " + normalizedMethod);
+  }
+
+  var headerName;
+  for (headerName in mergedHeaders) {
+    if (Object.prototype.hasOwnProperty.call(mergedHeaders, headerName)) {
+      request.setHeader(String(headerName), String(mergedHeaders[headerName]));
+    }
+  }
+
+  if (normalizedMethod === "POST" && payloadBytes !== null && payloadBytes !== undefined) {
+    var entity = null;
+    var safeContentType = spop_defaultString(contentType, "");
+    if (spop_isTextContentType(contentType)) {
+      var payloadText = new java.lang.String(payloadBytes, "UTF-8");
+      entity = new StringEntity(String(payloadText), ContentType.parse(spop_isBlank(safeContentType) ? "application/json; charset=UTF-8" : safeContentType));
+    } else {
+      entity = new ByteArrayEntity(payloadBytes, ContentType.parse(spop_isBlank(safeContentType) ? "application/octet-stream" : safeContentType));
+    }
+    request.setEntity(entity);
+  }
+
+  var response = null;
+  try {
+    response = client.execute(request);
+    var statusCode = response.getCode();
+    var responseEntity = response.getEntity();
+    var responseBytes = responseEntity === null ? java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 0) : EntityUtils.toByteArray(responseEntity);
+    var locationHeader = response.getFirstHeader("Location");
+    var etagHeader = response.getFirstHeader("ETag");
+
+    return {
+      statusCode: statusCode,
+      body: binaryResponse === true ? "" : String(new java.lang.String(responseBytes, "UTF-8")),
+      bytes: binaryResponse === true ? responseBytes : null,
+      location: locationHeader === null ? "" : spop_safeString(locationHeader.getValue()),
+      etag: etagHeader === null ? "" : spop_safeString(etagHeader.getValue())
+    };
+  } finally {
+    try {
+      if (response !== null && response !== undefined) {
+        response.close();
+      }
+    } catch (ignoreResponseClose) {
+    }
+    try {
+      client.close();
+    } catch (ignoreClientClose) {
+    }
+  }
+}
+
 function spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse) {
   var targetProject = spop_currentProjectName();
   if (spop_isBlank(targetProject)) {
@@ -442,7 +739,61 @@ function spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, cont
 
   var requester = null;
   var tempBinaryFile = null;
+  var connector = null;
+  var previousGivenAuthUser = null;
+  var previousGivenAuthPassword = null;
+  var previousNtlmDomain = null;
+  var hasNtlmDomainOverride = false;
   try {
+    connector = spop_getOnPremConnector();
+    if (connector !== null && connector !== undefined && connector.getGivenAuthUser && connector.getGivenAuthPassword && connector.setGivenAuthUser && connector.setGivenAuthPassword) {
+      var connectorAuthenticationType = spop_getConnectorAuthenticationType();
+      previousGivenAuthUser = connector.getGivenAuthUser();
+      previousGivenAuthPassword = connector.getGivenAuthPassword();
+
+      var effectiveGivenUser = auth !== null && auth !== undefined ? auth.connectorGivenUser : null;
+      var effectiveGivenPassword = auth !== null && auth !== undefined ? auth.connectorGivenPassword : null;
+
+      if (connectorAuthenticationType === "ntlm") {
+        var effectiveDomain = "";
+        if (connector.getNTLMAuthenticationDomain && connector.setNTLMAuthenticationDomain) {
+          previousNtlmDomain = connector.getNTLMAuthenticationDomain();
+          hasNtlmDomainOverride = true;
+
+          effectiveDomain = spop_safeString(previousNtlmDomain);
+          if (!spop_isConfiguredValue(effectiveDomain)) {
+            effectiveDomain = "";
+          }
+
+          var sourceUser = spop_isConfiguredValue(effectiveGivenUser) ? String(effectiveGivenUser) : (connector.getAuthUser ? spop_safeString(connector.getAuthUser()) : "");
+          var sourcePassword = spop_isConfiguredValue(effectiveGivenPassword) ? String(effectiveGivenPassword) : (connector.getAuthPassword ? spop_safeString(connector.getAuthPassword()) : "");
+          var splitIdentity = spop_splitDomainQualifiedUser(sourceUser);
+
+          if (splitIdentity.hasDomain) {
+            if (!spop_isConfiguredValue(effectiveDomain)) {
+              effectiveDomain = splitIdentity.domain;
+            }
+          }
+
+          // Keep DOMAIN\user untouched for connector NTLM. Some farms reject bare usernames.
+          if (!spop_isConfiguredValue(effectiveGivenUser) && spop_isConfiguredValue(sourceUser) && spop_isConfiguredValue(sourcePassword)) {
+            effectiveGivenUser = sourceUser;
+            effectiveGivenPassword = sourcePassword;
+          }
+
+          connector.setNTLMAuthenticationDomain(effectiveDomain);
+        }
+      }
+
+      if (spop_isConfiguredValue(effectiveGivenUser) && spop_isConfiguredValue(effectiveGivenPassword)) {
+        connector.setGivenAuthUser(String(effectiveGivenUser));
+        connector.setGivenAuthPassword(String(effectiveGivenPassword));
+      } else {
+        connector.setGivenAuthUser(null);
+        connector.setGivenAuthPassword(null);
+      }
+    }
+
     if (normalizedMethod === "POST" && payloadBytes !== null && payloadBytes !== undefined) {
       if (transactionName === "onPremBinaryRequest") {
         tempBinaryFile = spop_writeTempBinaryFile(payloadBytes);
@@ -502,10 +853,69 @@ function spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, cont
       }
     } catch (ignoreContextCleanup) {
     }
+    try {
+      if (connector !== null && connector !== undefined && connector.setGivenAuthUser && connector.setGivenAuthPassword) {
+        connector.setGivenAuthUser(previousGivenAuthUser);
+        connector.setGivenAuthPassword(previousGivenAuthPassword);
+      }
+    } catch (ignoreGivenAuthRestore) {
+    }
+    try {
+      if (hasNtlmDomainOverride && connector !== null && connector !== undefined && connector.setNTLMAuthenticationDomain) {
+        connector.setNTLMAuthenticationDomain(previousNtlmDomain === null || previousNtlmDomain === undefined ? "" : String(previousNtlmDomain));
+      }
+    } catch (ignoreNtlmDomainRestore) {
+    }
   }
 }
 
 function spop_httpRequest(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse) {
+  if (auth !== null && auth !== undefined && auth.mode === "onprem_connector_ntlm") {
+    var transportMode = spop_getNtlmTransportMode();
+    var connectorResult = null;
+    var clientResult = null;
+
+    if (transportMode === "connector_only") {
+      return spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+    }
+
+    if (transportMode === "httpclient_only") {
+      return spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+    }
+
+    if (transportMode === "httpclient_then_connector") {
+      try {
+        clientResult = spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+        if (clientResult.statusCode >= 200 && clientResult.statusCode < 300) {
+          return clientResult;
+        }
+      } catch (ignoreHttpClientFirst) {
+      }
+      return spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+    }
+
+    try {
+      connectorResult = spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+      if (connectorResult.statusCode >= 200 && connectorResult.statusCode < 300) {
+        return connectorResult;
+      }
+      if (connectorResult.statusCode !== 401 && connectorResult.statusCode !== 403) {
+        return connectorResult;
+      }
+    } catch (connectorError) {
+      connectorResult = null;
+    }
+
+    try {
+      return spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+    } catch (httpClientFallbackError) {
+      if (connectorResult !== null && connectorResult !== undefined) {
+        return connectorResult;
+      }
+      throw httpClientFallbackError;
+    }
+  }
+
   return spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
 }
 

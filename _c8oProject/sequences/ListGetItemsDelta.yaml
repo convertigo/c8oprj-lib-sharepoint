@@ -553,17 +553,18 @@ comment: Lists list item changes through Microsoft Graph delta API. (Graph permi
 ↓siteHostname [variables.RequestableVariable-1772711612331]: 
   comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
   description: SharePoint Online hostname
+  value: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
 ↓sitePath [variables.RequestableVariable-1772711612400]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
-  value: /sites/test1
+  value: ${lib_Microsoft_Sharepoint.onPrem.sitePath=/sites/test}
 ↓listId [variables.RequestableVariable-1772711612470]: 
   comment: Optional list identifier. If provided, listName is ignored.
   description: Optional Graph list identifier
 ↓listName [variables.RequestableVariable-1772711612548]: 
   comment: List display name or internal name used to resolve listId.
   description: SharePoint list name
-  value: Web Template Extensions
+  value: ${lib_Microsoft_Sharepoint.onPrem.listName=TestList}
 ↓deltaToken [variables.RequestableVariable-1772711612631]: 
   comment: Optional delta token returned by previous call.
   description: Delta token

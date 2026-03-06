@@ -516,22 +516,25 @@ comment: Deletes one SharePoint Online drive item through Microsoft Graph. (Grap
 ↓siteHostname [variables.RequestableVariable-1772719752072]: 
   comment: SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.
   description: SharePoint Online hostname
+  value: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
 ↓sitePath [variables.RequestableVariable-1772719752124]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
-  value: /sites/convertigo
+  value: ${lib_Microsoft_Sharepoint.onPrem.sitePath=/sites/test}
 ↓driveId [variables.RequestableVariable-1772719752184]: 
   comment: Optional drive identifier. If provided, driveName/listId/listName are ignored.
   description: Optional Graph drive identifier
 ↓driveName [variables.RequestableVariable-1772719752250]: 
   comment: Drive name used to resolve driveId when driveId is not provided.
   description: SharePoint drive name
+  value: ${lib_Microsoft_Sharepoint.onPrem.driveName=TestLibrary}
 ↓listId [variables.RequestableVariable-1772719752323]: 
   comment: Optional list identifier used to resolve associated drive.
   description: Optional Graph list identifier
 ↓listName [variables.RequestableVariable-1772719752404]: 
   comment: List display name or internal name used to resolve associated drive.
   description: SharePoint list name
+  value: ${lib_Microsoft_Sharepoint.onPrem.listName=TestList}
 ↓itemId [variables.RequestableVariable-1772719752493]: 
   comment: Target drive item identifier to delete.
   description: Target drive item id
@@ -564,7 +567,7 @@ comment: Deletes one SharePoint Online drive item through Microsoft Graph. (Grap
   value: 
     - ↑ciphered: true
     - ↑traceable: false
-    - →→: xd8e180806a1c1d83a6255212121ab827
+    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
   visibility: '-1'
 ↓TC_DeleteDriveItem [core.TestCase]: 
   ↓siteHostname [variables.TestCaseVariable-1772719754642]: 

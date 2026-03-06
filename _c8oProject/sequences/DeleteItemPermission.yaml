@@ -558,22 +558,25 @@ comment: Deletes one SharePoint drive item permission through Microsoft Graph (o
 ↓siteHostname [variables.RequestableVariable-1772719755239]: 
   comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
   description: SharePoint hostname
+  value: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
 ↓sitePath [variables.RequestableVariable-1772719755290]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
-  value: /sites/convertigo
+  value: ${lib_Microsoft_Sharepoint.onPrem.sitePath=/sites/test}
 ↓driveId [variables.RequestableVariable-1772719755348]: 
   comment: Optional drive identifier. If provided, driveName/listId/listName are ignored.
   description: Optional Graph drive identifier
 ↓driveName [variables.RequestableVariable-1772719755413]: 
   comment: Drive name used to resolve driveId when driveId is not provided.
   description: SharePoint drive name
+  value: ${lib_Microsoft_Sharepoint.onPrem.driveName=TestLibrary}
 ↓listId [variables.RequestableVariable-1772719755486]: 
   comment: Optional list identifier used to resolve associated drive.
   description: Optional Graph list identifier
 ↓listName [variables.RequestableVariable-1772719755566]: 
   comment: List display name or internal name used to resolve associated drive.
   description: SharePoint list name
+  value: ${lib_Microsoft_Sharepoint.onPrem.listName=TestList}
 ↓itemId [variables.RequestableVariable-1772719755652]: 
   comment: Target drive item identifier owning the permission to delete.
   description: Target drive item id
@@ -609,18 +612,35 @@ comment: Deletes one SharePoint drive item permission through Microsoft Graph (o
   value: 
     - ↑ciphered: true
     - ↑traceable: false
-    - →→: xd8e180806a1c1d83a6255212121ab827
+    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
   visibility: '-1'
-↓TC_DeleteDriveItemPermission [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772719758217]: 
+↓TC_DeleteDriveItemPermission_Graph [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772803982855]: 
     value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772719758241]: 
+  ↓sitePath [variables.TestCaseVariable-1772803982884]: 
     value: /sites/test1
-  ↓driveName [variables.TestCaseVariable-1772719758273]: 
+  ↓driveName [variables.TestCaseVariable-1772803982919]: 
     value: Documents
-  ↓itemId [variables.TestCaseVariable-1772719758315]: 
+  ↓itemId [variables.TestCaseVariable-1772803982962]: 
     value: 01PETTHVHBULYXIKX2EZFIAFNZVAYMGFUP
-  ↓permissionId [variables.TestCaseVariable-1772719758362]: 
+  ↓permissionId [variables.TestCaseVariable-1772803983021]: 
     value: dGVzdDEgVmlzaXRvcnM
-  ↓includeDeletedPermissionSnapshot [variables.TestCaseVariable-1772719758414]: 
+  ↓includeDeletedPermissionSnapshot [variables.TestCaseVariable-1772803983077]: 
     value: false
+  ↓provider [variables.TestCaseVariable-1772803983153]: 
+    value: graph
+↓TC_DeleteDriveItemPermission_OnPrem [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772803983580]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
+  ↓sitePath [variables.TestCaseVariable-1772803983598]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.sitePath=/sites/test}
+  ↓driveName [variables.TestCaseVariable-1772803983632]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.driveName=TestLibrary}
+  ↓itemId [variables.TestCaseVariable-1772803983678]: 
+    value: 01PETTHVHBULYXIKX2EZFIAFNZVAYMGFUP
+  ↓permissionId [variables.TestCaseVariable-1772803983738]: 
+    value: dGVzdDEgVmlzaXRvcnM
+  ↓includeDeletedPermissionSnapshot [variables.TestCaseVariable-1772803983798]: 
+    value: false
+  ↓provider [variables.TestCaseVariable-1772803983878]: 
+    value: onprem

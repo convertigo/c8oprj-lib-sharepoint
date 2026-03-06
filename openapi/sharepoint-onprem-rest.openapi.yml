@@ -1,0 +1,527 @@
+openapi: 3.0.3
+info:
+  title: SharePoint On-Prem REST API (Project Subset)
+  version: 0.1.0
+  description: |
+    OpenAPI subset for SharePoint On-Prem REST endpoints used by this Convertigo project.
+
+    Scope:
+    - Built from the actual endpoint patterns used in `js/sharepoint_onprem.js` and `js/sharepoint_onprem_dispatch.js`.
+    - Not an official Microsoft full API contract.
+
+    Authentication notes:
+    - SharePoint On-Prem commonly uses NTLM/Kerberos/Claims and form digest for writes.
+    - This spec models auth headers as options, but NTLM handshake is usually handled by client runtime/connector.
+
+servers:
+  - url: "{baseUrl}"
+    description: SharePoint site base URL
+    variables:
+      baseUrl:
+        default: https://sharepoint.local/sites/test
+
+tags:
+  - name: Context
+  - name: Web
+  - name: Lists
+  - name: Items
+  - name: Files
+  - name: Folders
+
+security:
+  - bearerAuth: []
+  - basicAuth: []
+  - cookieHeaderAuth: []
+  - ntlmAuth: []
+
+paths:
+  "/_api/contextinfo":
+    post:
+      tags: [Context]
+      summary: Get form digest for write operations
+      operationId: postContextInfo
+      requestBody:
+        required: false
+        content:
+          application/json;odata=verbose;charset=utf-8:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Context info resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContextInfoResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  "/_api/web":
+    get:
+      tags: [Web]
+      summary: Get current web metadata
+      operationId: getWeb
+      parameters:
+        - $ref: '#/components/parameters/select'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  "/_api/web/lists":
+    get:
+      tags: [Lists]
+      summary: List site lists
+      operationId: listLists
+      parameters:
+        - $ref: '#/components/parameters/top'
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/expand'
+        - $ref: '#/components/parameters/filter'
+        - $ref: '#/components/parameters/orderby'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  "/_api/web/lists(guid'{listId}')":
+    parameters:
+      - $ref: '#/components/parameters/listId'
+    get:
+      tags: [Lists]
+      summary: Get list by GUID
+      operationId: getListById
+      parameters:
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/expand'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Lists]
+      summary: Update or delete list metadata using X-HTTP-Method
+      operationId: postListById
+      parameters:
+        - $ref: '#/components/parameters/xRequestDigest'
+        - $ref: '#/components/parameters/ifMatch'
+        - $ref: '#/components/parameters/xHttpMethodList'
+      requestBody:
+        required: false
+        content:
+          application/json;odata=verbose;charset=utf-8:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '204':
+          description: Updated/deleted with no content
+
+  "/_api/web/lists/GetByTitle('{listTitle}')":
+    parameters:
+      - $ref: '#/components/parameters/listTitle'
+    get:
+      tags: [Lists]
+      summary: Get list by title
+      operationId: getListByTitle
+      parameters:
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/expand'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  "/_api/web/lists(guid'{listId}')/items":
+    parameters:
+      - $ref: '#/components/parameters/listId'
+    get:
+      tags: [Items]
+      summary: List items by list GUID
+      operationId: listItemsByListId
+      parameters:
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/expand'
+        - $ref: '#/components/parameters/filter'
+        - $ref: '#/components/parameters/orderby'
+        - $ref: '#/components/parameters/top'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+    post:
+      tags: [Items]
+      summary: Create list item by list GUID
+      operationId: createItemByListId
+      parameters:
+        - $ref: '#/components/parameters/xRequestDigest'
+      requestBody:
+        required: true
+        content:
+          application/json;odata=verbose;charset=utf-8:
+            schema:
+              $ref: '#/components/schemas/ListItemWriteBody'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '201':
+          $ref: '#/components/responses/ODataVerboseJson'
+
+  "/_api/web/lists/GetByTitle('{listTitle}')/items":
+    parameters:
+      - $ref: '#/components/parameters/listTitle'
+    get:
+      tags: [Items]
+      summary: List items by list title
+      operationId: listItemsByListTitle
+      parameters:
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/expand'
+        - $ref: '#/components/parameters/filter'
+        - $ref: '#/components/parameters/orderby'
+        - $ref: '#/components/parameters/top'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+    post:
+      tags: [Items]
+      summary: Create list item by list title
+      operationId: createItemByListTitle
+      parameters:
+        - $ref: '#/components/parameters/xRequestDigest'
+      requestBody:
+        required: true
+        content:
+          application/json;odata=verbose;charset=utf-8:
+            schema:
+              $ref: '#/components/schemas/ListItemWriteBody'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '201':
+          $ref: '#/components/responses/ODataVerboseJson'
+
+  "/_api/web/lists(guid'{listId}')/items({itemId})":
+    parameters:
+      - $ref: '#/components/parameters/listId'
+      - $ref: '#/components/parameters/itemId'
+    get:
+      tags: [Items]
+      summary: Get item by list GUID and item id
+      operationId: getItemByListId
+      parameters:
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/expand'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Items]
+      summary: Update or delete item by list GUID using X-HTTP-Method
+      operationId: postItemByListId
+      parameters:
+        - $ref: '#/components/parameters/xRequestDigest'
+        - $ref: '#/components/parameters/ifMatch'
+        - $ref: '#/components/parameters/xHttpMethodItem'
+      requestBody:
+        required: false
+        content:
+          application/json;odata=verbose;charset=utf-8:
+            schema:
+              $ref: '#/components/schemas/ListItemWriteBody'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '204':
+          description: Updated/deleted with no content
+
+  "/_api/web/lists/GetByTitle('{listTitle}')/items({itemId})":
+    parameters:
+      - $ref: '#/components/parameters/listTitle'
+      - $ref: '#/components/parameters/itemId'
+    get:
+      tags: [Items]
+      summary: Get item by list title and item id
+      operationId: getItemByListTitle
+      parameters:
+        - $ref: '#/components/parameters/select'
+        - $ref: '#/components/parameters/expand'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Items]
+      summary: Update or delete item by list title using X-HTTP-Method
+      operationId: postItemByListTitle
+      parameters:
+        - $ref: '#/components/parameters/xRequestDigest'
+        - $ref: '#/components/parameters/ifMatch'
+        - $ref: '#/components/parameters/xHttpMethodItem'
+      requestBody:
+        required: false
+        content:
+          application/json;odata=verbose;charset=utf-8:
+            schema:
+              $ref: '#/components/schemas/ListItemWriteBody'
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '204':
+          description: Updated/deleted with no content
+
+  "/_api/web/GetFolderByServerRelativeUrl('{folderServerRelativeUrl}')":
+    parameters:
+      - $ref: '#/components/parameters/folderServerRelativeUrl'
+    get:
+      tags: [Folders]
+      summary: Get folder metadata by server relative URL
+      operationId: getFolderByServerRelativeUrl
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  "/_api/web/GetFileByServerRelativeUrl('{fileServerRelativeUrl}')":
+    parameters:
+      - $ref: '#/components/parameters/fileServerRelativeUrl'
+    get:
+      tags: [Files]
+      summary: Get file metadata by server relative URL
+      operationId: getFileByServerRelativeUrl
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  "/_api/web/GetFileByServerRelativeUrl('{fileServerRelativeUrl}')/$value":
+    parameters:
+      - $ref: '#/components/parameters/fileServerRelativeUrl'
+    get:
+      tags: [Files]
+      summary: Download file content by server relative URL
+      operationId: downloadFileByServerRelativeUrl
+      responses:
+        '200':
+          description: Binary stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  "/_api/web/GetFolderByServerRelativeUrl('{folderServerRelativeUrl}')/Files/Add(url='{fileName}',overwrite={overwrite})":
+    parameters:
+      - $ref: '#/components/parameters/folderServerRelativeUrl'
+      - $ref: '#/components/parameters/fileName'
+      - $ref: '#/components/parameters/overwrite'
+    post:
+      tags: [Files]
+      summary: Upload file content to folder
+      operationId: uploadFileToFolder
+      parameters:
+        - $ref: '#/components/parameters/xRequestDigest'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          $ref: '#/components/responses/ODataVerboseJson'
+        '201':
+          $ref: '#/components/responses/ODataVerboseJson'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OAuth bearer (mostly SharePoint Online/OBO flows)
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Basic authentication when enabled by farm/policy
+    cookieHeaderAuth:
+      type: apiKey
+      in: header
+      name: Cookie
+      description: FedAuth/rtFa cookie header
+    ntlmAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: NTLM handshake is usually negotiated by HTTP client stack/connector
+
+  parameters:
+    listId:
+      name: listId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 11111111-2222-3333-4444-555555555555
+    listTitle:
+      name: listTitle
+      in: path
+      required: true
+      schema:
+        type: string
+      example: TestList
+    itemId:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: integer
+      example: 42
+    folderServerRelativeUrl:
+      name: folderServerRelativeUrl
+      in: path
+      required: true
+      schema:
+        type: string
+      description: URL-encoded server relative path (example value shows decoded form)
+      example: /sites/test/Shared Documents
+    fileServerRelativeUrl:
+      name: fileServerRelativeUrl
+      in: path
+      required: true
+      schema:
+        type: string
+      description: URL-encoded server relative path (example value shows decoded form)
+      example: /sites/test/Shared Documents/demo.txt
+    fileName:
+      name: fileName
+      in: path
+      required: true
+      schema:
+        type: string
+      example: demo.txt
+    overwrite:
+      name: overwrite
+      in: path
+      required: true
+      schema:
+        type: boolean
+      example: true
+    select:
+      name: $select
+      in: query
+      required: false
+      schema:
+        type: string
+      example: Id,Title,ServerRelativeUrl
+    expand:
+      name: $expand
+      in: query
+      required: false
+      schema:
+        type: string
+      example: RootFolder,FieldValuesAsText
+    filter:
+      name: $filter
+      in: query
+      required: false
+      schema:
+        type: string
+      example: Hidden eq false
+    orderby:
+      name: $orderby
+      in: query
+      required: false
+      schema:
+        type: string
+      example: Title asc
+    top:
+      name: $top
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+      example: 200
+    xRequestDigest:
+      name: X-RequestDigest
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Form digest from POST /_api/contextinfo
+    ifMatch:
+      name: IF-MATCH
+      in: header
+      required: false
+      schema:
+        type: string
+        default: '*'
+      description: ETag or * wildcard
+    xHttpMethodList:
+      name: X-HTTP-Method
+      in: header
+      required: true
+      schema:
+        type: string
+        enum: [MERGE, DELETE]
+    xHttpMethodItem:
+      name: X-HTTP-Method
+      in: header
+      required: true
+      schema:
+        type: string
+        enum: [MERGE, DELETE]
+
+  schemas:
+    ODataVerboseAny:
+      type: object
+      additionalProperties: true
+      description: Generic OData verbose payload wrapper (often includes d/results/__next)
+    ContextInfoResponse:
+      type: object
+      additionalProperties: true
+      description: OData verbose response containing d.GetContextWebInformation.FormDigestValue
+    ListItemWriteBody:
+      type: object
+      additionalProperties: true
+      description: List item fields payload with optional __metadata.type
+      example:
+        __metadata:
+          type: SP.Data.TestListItem
+        Title: Example item
+
+  responses:
+    ODataVerboseJson:
+      description: SharePoint OData verbose JSON payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ODataVerboseAny'
+    Unauthorized:
+      description: Authentication challenge or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ODataVerboseAny'
+    NotFound:
+      description: Target resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ODataVerboseAny'

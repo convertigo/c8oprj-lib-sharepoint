@@ -1,5 +1,4 @@
 accessibility: Hidden
-authenticatedContextRequired: true
 comment: Resolves a SharePoint list by site and list identifier/name using Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 ↓inputVars [steps.InputVariablesStep-1772620734382]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
@@ -350,16 +349,18 @@ comment: Resolves a SharePoint list by site and list identifier/name using Micro
 ↓siteHostname [variables.RequestableVariable-1772620734697]: 
   comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
   description: SharePoint hostname
+  value: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
 ↓sitePath [variables.RequestableVariable-1772620734793]: 
   comment: Site path when resolving siteId, for example /sites/engineering.
   description: SharePoint site path
-  value: /sites/convertigo
+  value: ${lib_Microsoft_Sharepoint.onPrem.sitePath=/sites/test}
 ↓listId [variables.RequestableVariable-1772620734897]: 
   comment: Optional list identifier. If provided, listName is ignored.
   description: Optional Graph list identifier
 ↓listName [variables.RequestableVariable-1772620735012]: 
   comment: List display name or internal name used to resolve listId.
   description: SharePoint list name
+  value: ${lib_Microsoft_Sharepoint.onPrem.listName=TestList}
 ↓accessToken [variables.RequestableVariable-1772620735132]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
@@ -390,7 +391,7 @@ comment: Resolves a SharePoint list by site and list identifier/name using Micro
 ↓onPremProtocol [variables.RequestableVariable-1772714810819]: 
   comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
   description: On-prem protocol fallback
-  value: https
+  value: ${lib_Microsoft_Sharepoint.onPrem.protocol=https}
 ↓onPremUsername [variables.RequestableVariable-1772714810874]: 
   comment: Optional technical username for on-prem basic authentication.
   description: On-prem technical username
@@ -411,10 +412,21 @@ comment: Resolves a SharePoint list by site and list identifier/name using Micro
     - ↑traceable: false
     - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb40524d13591840f063c4918706e203c3286f7945be3bd1a0c33cb44b7f24f9d492d4c
   visibility: '-1'
-↓TC_ResolveList [core.TestCase]: 
-  ↓siteHostname [variables.TestCaseVariable-1772620737436]: 
+↓TC_ResolveList_Graph [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772804000820]: 
     value: convertigo.sharepoint.com
-  ↓sitePath [variables.TestCaseVariable-1772620737497]: 
+  ↓sitePath [variables.TestCaseVariable-1772804000845]: 
     value: /sites/test1
-  ↓listName [variables.TestCaseVariable-1772620737564]: 
+  ↓listName [variables.TestCaseVariable-1772804000878]: 
     value: Web Template Extensions
+  ↓provider [variables.TestCaseVariable-1772804000923]: 
+    value: graph
+↓TC_ResolveList_OnPrem [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1772804001234]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
+  ↓sitePath [variables.TestCaseVariable-1772804001260]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.sitePath=/sites/test}
+  ↓listName [variables.TestCaseVariable-1772804001295]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.listName=TestList}
+  ↓provider [variables.TestCaseVariable-1772804001341]: 
+    value: onprem

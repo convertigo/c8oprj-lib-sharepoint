@@ -106,8 +106,12 @@ These symbols are optional and used by routed sequences (`provider=onprem`) when
 <table>
 <tr><th>Symbol</th><th>Required</th><th>Secret</th><th>Purpose</th></tr>
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}</code></td><td>Recommended</td><td>No</td><td>Base URL of on-prem site (example: <code>https://sharepoint.local/sites/intranet</code>).</td></tr>
-<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.username}</code></td><td>Optional</td><td>No</td><td>Technical username for basic auth.</td></tr>
-<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.password.secret}</code></td><td>Optional</td><td>Yes</td><td>Technical password for basic auth.</td></tr>
+<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.protocol}</code></td><td>Optional</td><td>No</td><td>Fallback protocol used by routed sequences when only host/path are provided (default <code>https</code>).</td></tr>
+<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.sitePath}</code></td><td>Optional</td><td>No</td><td>Default on-prem site path fallback used by routed sequences when <code>sitePath</code> is not passed (example: <code>/sites/test</code>).</td></tr>
+<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.listName}</code></td><td>Optional</td><td>No</td><td>Default on-prem list name fallback used by routed sequences when <code>listName</code> is not passed (example: <code>TestList</code>).</td></tr>
+<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.driveName}</code></td><td>Optional</td><td>No</td><td>Default on-prem library/drive name fallback used by routed sequences when <code>driveName</code> is not passed (example: <code>TestLibrary</code>).</td></tr>
+<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.username}</code></td><td>Optional</td><td>No</td><td>Technical username for on-prem auth (connector Basic/NTLM and sequence-level Basic fallback).</td></tr>
+<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.password.secret}</code></td><td>Optional</td><td>Yes</td><td>Technical password for on-prem auth (connector Basic/NTLM and sequence-level Basic fallback).</td></tr>
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.cookieHeader.secret}</code></td><td>Optional</td><td>Yes</td><td>Cookie header for forms auth (FedAuth/rtFa).</td></tr>
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.http.server}</code></td><td>Optional</td><td>No</td><td>On-prem HTTP connector host (default <code>sharepoint.local</code>).</td></tr>
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.http.port}</code></td><td>Optional</td><td>No</td><td>On-prem HTTP connector port (default <code>443</code>).</td></tr>
@@ -115,8 +119,13 @@ These symbols are optional and used by routed sequences (`provider=onprem`) when
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.http.baseDir}</code></td><td>Optional</td><td>No</td><td>On-prem HTTP connector base path (default <code>/</code>).</td></tr>
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.http.trustAll}</code></td><td>Optional</td><td>No</td><td>Trust all TLS certificates in on-prem HTTP connector (default <code>true</code>).</td></tr>
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.http.defaultSubDir}</code></td><td>Optional</td><td>No</td><td>Default transaction sub path for connector transactions (default <code>/_api/web</code>).</td></tr>
+<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.http.authenticationType}</code></td><td>Optional</td><td>No</td><td>Connector auth mode: <code>None</code>, <code>Basic</code>, <code>BasicPreemptive</code>, <code>NTLM</code> (default <code>None</code>).</td></tr>
+<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.http.ntlmDomain}</code></td><td>Optional</td><td>No</td><td>NTLM domain when <code>authenticationType=NTLM</code>.</td></tr>
+<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.http.ntlmTransportMode}</code></td><td>Optional</td><td>No</td><td>NTLM transport strategy: <code>connectorOnly</code>, <code>connectorThenHttpClient</code> (default), <code>httpClientThenConnector</code>, <code>httpClientOnly</code>.</td></tr>
 </table>
-These `onPrem.http.*` symbols are used by connector `sharepointOnPremHttp`.
+Connector `sharepointOnPremHttp` uses shared credentials symbols `onPrem.username` and `onPrem.password.secret`.
+For Claims/NTLM farms, set `onPrem.http.authenticationType=NTLM` and `onPrem.http.ntlmDomain` with those same shared credentials symbols.
+When `onPrem.http.authenticationType` is `NTLM` (or `Basic`/`BasicPreemptive`), routed on-prem helper calls delegate authentication to the connector and do not force a sequence-level `Authorization: Basic` header.
 
 ## Authentication Model
 
@@ -128,8 +137,8 @@ These `onPrem.http.*` symbols are used by connector `sharepointOnPremHttp`.
 - Sequence responses expose `tokenMode` (`delegated` or `application`) for diagnostics.
 - On-prem routed operations support bearer token, basic auth, or cookie-based auth, and write operations automatically request SharePoint FormDigest via `/_api/contextinfo`.
 - On-prem logic is executed directly from routed public sequences through shared JS helpers (no internal `OnPrem*` sequences).
-- Connector `sharepointOnPremHttp` is now used by shared on-prem helper `spop_httpRequest` for all routed GET/POST calls (JSON/text and binary content).
-- On-prem HTTP execution is connector-only (no direct HTTP fallback in helper code).
+- Connector `sharepointOnPremHttp` is used first by shared on-prem helper `spop_httpRequest` for routed NTLM calls, with optional HttpClient5 fallback depending on `onPrem.http.ntlmTransportMode`.
+- On-prem HTTP execution strategy is configurable: `connectorOnly`, `connectorThenHttpClient` (default), `httpClientThenConnector`, `httpClientOnly`.
 
 ## On-Prem API Coverage
 
@@ -2224,5 +2233,4 @@ Uploads one SharePoint Online drive file using Graph upload session and chunk tr
 <td>tenantId</td><td>Azure Entra tenant id used for app-only token acquisition.</td>
 </tr>
 </table>
-
 
