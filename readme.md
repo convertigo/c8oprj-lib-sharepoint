@@ -16,6 +16,8 @@ For more technical informations : [documentation](./project.md)
     - [On-Prem Symbols](#on-prem-symbols)
 - [Authentication Model](#authentication-model)
 - [On-Prem API Coverage](#on-prem-api-coverage)
+- [Validated Status](#validated-status)
+- [Support Matrix](#support-matrix)
 - [Endpoint-Only Test Calls](#endpoint-only-test-calls)
 - [Logical Test Plan Script](#logical-test-plan-script)
 - [Typical Request Patterns](#typical-request-patterns)
@@ -106,7 +108,7 @@ These symbols are optional and used by routed sequences (`provider=onprem`) when
 <table>
 <tr><th>Symbol</th><th>Required</th><th>Secret</th><th>Purpose</th></tr>
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}</code></td><td>Recommended</td><td>No</td><td>Base URL of on-prem site (example: <code>https://sharepoint.local/sites/intranet</code>).</td></tr>
-<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.protocol}</code></td><td>Optional</td><td>No</td><td>Fallback protocol used by routed sequences when only host/path are provided (default <code>https</code>).</td></tr>
+<tr><td><code>${lib_Microsoft_Sharepoint.onPrem.protocol}</code></td><td>Optional</td><td>No</td><td>Fallback protocol used by routed sequences when only host/path are provided. If empty, runtime first reuses the connector scheme, then falls back to <code>https</code>.</td></tr>
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.sitePath}</code></td><td>Optional</td><td>No</td><td>Default on-prem site path fallback used by routed sequences when <code>sitePath</code> is not passed (example: <code>/sites/test</code>).</td></tr>
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.listName}</code></td><td>Optional</td><td>No</td><td>Default on-prem list name fallback used by routed sequences when <code>listName</code> is not passed (example: <code>TestList</code>).</td></tr>
 <tr><td><code>${lib_Microsoft_Sharepoint.onPrem.driveName}</code></td><td>Optional</td><td>No</td><td>Default on-prem library/drive name fallback used by routed sequences when <code>driveName</code> is not passed (example: <code>TestLibrary</code>).</td></tr>
@@ -125,6 +127,8 @@ These symbols are optional and used by routed sequences (`provider=onprem`) when
 </table>
 Connector `sharepointOnPremHttp` uses shared credentials symbols `onPrem.username` and `onPrem.password.secret`.
 For Claims/NTLM farms, set `onPrem.http.authenticationType=NTLM` and `onPrem.http.ntlmDomain` with those same shared credentials symbols.
+NTLM username can be provided either as a bare user (`Administrator`) plus `onPrem.http.ntlmDomain=LAB`, or as a qualified identity (`LAB\\Administrator`).
+If the username already contains a domain, runtime can split it for the HttpClient NTLM path and still preserve the qualified value for connector-driven NTLM calls.
 When `onPrem.http.authenticationType` is `NTLM` (or `Basic`/`BasicPreemptive`), routed on-prem helper calls delegate authentication to the connector and do not force a sequence-level `Authorization: Basic` header.
 
 ## Authentication Model
@@ -145,9 +149,71 @@ When `onPrem.http.authenticationType` is `NTLM` (or `Basic`/`BasicPreemptive`), 
 - Site/list resolvers: `ResolveSite`, `ResolveList`, `ResolveLibrary` with `provider=onprem`.
 - On-prem discovery lists: `ListSiteLists`, `ListSiteDrives` with `provider=onprem`.
 - List CRUD: `ListGetItems`, `GetListItem`, `CreateListItem`, `UpdateListItem`, `DeleteListItem` with `provider=onprem`.
-- File/folder APIs: `ListItems`, `UploadItemContent`, `DownloadItemContent`, `DeleteItem`, `ListItemVersions`, `RestoreItemVersion`, `MoveItem`, `CopyItem`, `CreateFolder` with `provider=onprem`.
-- Share block (`CreateShareLink`, `InviteItemRecipients`, `ListItemPermissions`, `DeleteItemPermission`) stays routed but returns explicit `not_supported_onprem` fallback in on-prem mode.
-- Not covered in on-prem mode: Graph batch, Graph subscriptions.
+- File/folder APIs: `GetItem`, `ListItems`, `CreateFolder`, `UploadItemContent`, `UploadItemLargeContent`, `DownloadItemContent`, `UpdateItem`, `MoveItem`, `CopyItem`, `DeleteItem` with `provider=onprem`.
+- Delta and versions: `ListGetItemsDelta`, `ListItemsDelta`, `ListItemVersions`, `RestoreItemVersion`, `GetCopyItemOperation` with `provider=onprem`.
+- Share block (`CreateShareLink`, `InviteItemRecipients`, `ListItemPermissions`, `DeleteItemPermission`) stays routed but returns explicit `onprem_not_supported` fallback in on-prem mode; callers get a stable payload, not a native permission mutation.
+- Graph-only operations in on-prem runs: `GetGraphAccessToken`, `ExecuteGraphBatch`, `CreateGraphSubscription`, `DeleteGraphSubscription`.
+
+## Validated Status
+
+Current validated state from the local logical plan reports:
+
+<table>
+<tr><th>Mode</th><th>Report</th><th>Result</th><th>Notes</th></tr>
+<tr><td>Graph</td><td><code>build/logical-test-plan-report-graph-refactor4.json</code></td><td><code>34 total / 30 passed / 0 failed / 4 skipped / 0 mandatory failed</code></td><td>Skipped in this run: <code>GetCopyItemOperation</code>, <code>RestoreItemVersion</code>, <code>CreateGraphSubscription</code>, <code>DeleteGraphSubscription</code>.</td></tr>
+<tr><td>On-Prem</td><td><code>build/logical-test-plan-report-onprem-refactor4.json</code></td><td><code>34 total / 30 passed / 0 failed / 4 skipped / 0 mandatory failed</code></td><td>Skipped in this run: <code>GetGraphAccessToken</code>, <code>ExecuteGraphBatch</code>, <code>CreateGraphSubscription</code>, <code>DeleteGraphSubscription</code>.</td></tr>
+</table>
+
+Operationally, this means:
+- Graph mode is validated on the current test plan.
+- On-prem mode is validated for site/list/library resolution, list CRUD, drive read/write, delta, versions, restore, and copy monitoring.
+- On-prem share/permission endpoints keep a routed contract but intentionally return `onprem_not_supported`.
+
+## Support Matrix
+
+Legend:
+- `Native`: implemented for the mode.
+- `Fallback`: routed sequence stays callable but returns an explicit fallback payload instead of executing a native backend operation.
+- `Out of scope`: not available in that mode.
+- `Local`: tooling/helper sequence, not a SharePoint runtime backend operation.
+
+<table>
+<tr><th>Sequence</th><th>Graph</th><th>On-Prem</th><th>Notes</th></tr>
+<tr><td><code>BuildGraphFlatJar</code></td><td><code>Local</code></td><td><code>Out of scope</code></td><td>Build helper for the Graph Java SDK jar.</td></tr>
+<tr><td><code>CopyItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Asynchronous copy; monitor is exposed by <code>GetCopyItemOperation</code>.</td></tr>
+<tr><td><code>CreateFolder</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Creates a folder in the target drive/library.</td></tr>
+<tr><td><code>CreateGraphSubscription</code></td><td><code>Native</code></td><td><code>Out of scope</code></td><td>Graph-only webhook subscription API.</td></tr>
+<tr><td><code>CreateListItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List item create path is available in both modes.</td></tr>
+<tr><td><code>CreateShareLink</code></td><td><code>Native</code></td><td><code>Fallback</code></td><td>On-prem returns explicit <code>onprem_not_supported</code>.</td></tr>
+<tr><td><code>DeleteGraphSubscription</code></td><td><code>Native</code></td><td><code>Out of scope</code></td><td>Graph-only webhook subscription API.</td></tr>
+<tr><td><code>DeleteItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>File/folder deletion is supported in both modes.</td></tr>
+<tr><td><code>DeleteItemPermission</code></td><td><code>Native</code></td><td><code>Fallback</code></td><td>On-prem returns explicit <code>onprem_not_supported</code>.</td></tr>
+<tr><td><code>DeleteListItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List item delete path is available in both modes.</td></tr>
+<tr><td><code>DownloadItemContent</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Binary download path is available in both modes.</td></tr>
+<tr><td><code>ExecuteGraphBatch</code></td><td><code>Native</code></td><td><code>Out of scope</code></td><td>Graph-only batch endpoint.</td></tr>
+<tr><td><code>GetCopyItemOperation</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Graph and on-prem expose copy monitoring.</td></tr>
+<tr><td><code>GetGraphAccessToken</code></td><td><code>Native</code></td><td><code>Out of scope</code></td><td>Graph token helper; no on-prem equivalent.</td></tr>
+<tr><td><code>GetItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Drive item resolution/read is available in both modes.</td></tr>
+<tr><td><code>GetListItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List item read path is available in both modes.</td></tr>
+<tr><td><code>InviteItemRecipients</code></td><td><code>Native</code></td><td><code>Fallback</code></td><td>On-prem returns explicit <code>onprem_not_supported</code>.</td></tr>
+<tr><td><code>ListGetItems</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List item enumeration is available in both modes.</td></tr>
+<tr><td><code>ListGetItemsDelta</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Incremental list changes are available in both modes.</td></tr>
+<tr><td><code>ListItemPermissions</code></td><td><code>Native</code></td><td><code>Fallback</code></td><td>On-prem returns explicit <code>onprem_not_supported</code>.</td></tr>
+<tr><td><code>ListItemVersions</code></td><td><code>Native</code></td><td><code>Native</code></td><td>File version listing is available in both modes.</td></tr>
+<tr><td><code>ListItems</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Drive/library children listing is available in both modes.</td></tr>
+<tr><td><code>ListItemsDelta</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Incremental drive changes are available in both modes.</td></tr>
+<tr><td><code>ListSiteDrives</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Drive/library discovery is available in both modes.</td></tr>
+<tr><td><code>ListSiteLists</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List discovery is available in both modes.</td></tr>
+<tr><td><code>MoveItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Move/rename path is available in both modes.</td></tr>
+<tr><td><code>ResolveLibrary</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Library/drive resolver is available in both modes.</td></tr>
+<tr><td><code>ResolveList</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List resolver is available in both modes.</td></tr>
+<tr><td><code>ResolveSite</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Site resolver is available in both modes.</td></tr>
+<tr><td><code>RestoreItemVersion</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Version restore is available in both modes.</td></tr>
+<tr><td><code>UpdateItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Drive item update path is available in both modes.</td></tr>
+<tr><td><code>UpdateListItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List item update path is available in both modes.</td></tr>
+<tr><td><code>UploadItemContent</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Small/regular uploads are available in both modes.</td></tr>
+<tr><td><code>UploadItemLargeContent</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Large uploads are available in both modes.</td></tr>
+</table>
 
 ## Endpoint-Only Test Calls
 
@@ -180,6 +246,7 @@ python3 ./scripts/run_testcases.py
 Useful overrides:
 - `C8O_BASE_URL` to target another Convertigo endpoint.
 - `C8O_PROJECT` to target another project name.
+- `TEST_PROVIDER=graph` or `TEST_PROVIDER=onprem` to force the backend under test.
 - `SITE_HOSTNAME`, `SITE_PATH`, `LIST_NAME`, `DRIVE_NAME` to target another SharePoint site context.
 - `ACCESS_TOKEN` (delegated mode) or `AZ_TENANT_ID` + `AZ_CLIENT_ID` + `AZ_CLIENT_SECRET` (application override).
 - `RUN_SHARE_OPERATIONS=false` to skip share/invite/permission deletion calls.
@@ -295,7 +362,7 @@ Builds a flat JAR for Microsoft Graph Java SDK and stores it under .//libs (no M
 
 ### CopyItem
 
-Starts one SharePoint Online drive item copy operation through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Copies one SharePoint drive item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -311,6 +378,9 @@ Starts one SharePoint Online drive item copy operation through Microsoft Graph. 
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>destinationParentItemId</td><td>Optional destination parent item id. Use root to copy under drive root.</td>
@@ -337,6 +407,21 @@ Starts one SharePoint Online drive item copy operation through Microsoft Graph. 
 <td>newName</td><td>Optional target file/folder name for the copied item.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
+</tr>
+<tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
 </tr>
 <tr>
@@ -352,7 +437,7 @@ Starts one SharePoint Online drive item copy operation through Microsoft Graph. 
 
 ### CreateFolder
 
-Creates one SharePoint Online drive folder through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Creates one SharePoint drive folder through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -373,6 +458,9 @@ Creates one SharePoint Online drive folder through Microsoft Graph. (Graph permi
 <td>conflictBehavior</td><td>Conflict behavior when folder exists. Allowed values are rename, replace or fail.</td>
 </tr>
 <tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
+</tr>
+<tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
 </tr>
 <tr>
@@ -391,13 +479,28 @@ Creates one SharePoint Online drive folder through Microsoft Graph. (Graph permi
 <td>listName</td><td>List display name or internal name used to resolve associated drive.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
 <td>parentItemId</td><td>Parent drive item id where folder will be created. Use root or leave empty for drive root.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
 </tr>
 <tr>
 <td>returnCreatedItem</td><td>true reloads created item with optional field projection before returning.</td>
 </tr>
 <tr>
 <td>selectFields</td><td>Optional comma-separated list of Graph driveItem properties to select.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -634,7 +737,7 @@ Deletes one Microsoft Graph webhook subscription (resource-dependent permissions
 
 ### DeleteItem
 
-Deletes one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Deletes one SharePoint drive item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -650,6 +753,9 @@ Deletes one SharePoint Online drive item through Microsoft Graph. (Graph permiss
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
@@ -673,7 +779,22 @@ Deletes one SharePoint Online drive item through Microsoft Graph. (Graph permiss
 <td>listName</td><td>List display name or internal name used to resolve associated drive.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
 <td>selectFields</td><td>Optional comma-separated list of Graph driveItem properties to select in returned snapshot.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -820,7 +941,7 @@ Deletes one SharePoint list item through Microsoft Graph (online) or SharePoint 
 
 ### DownloadItemContent
 
-Downloads one SharePoint Online drive file content through Microsoft Graph. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
+Downloads one SharePoint drive file content through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -836,6 +957,9 @@ Downloads one SharePoint Online drive file content through Microsoft Graph. (Gra
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
@@ -860,6 +984,21 @@ Downloads one SharePoint Online drive file content through Microsoft Graph. (Gra
 </tr>
 <tr>
 <td>listName</td><td>List display name or internal name used to resolve associated drive.</td>
+</tr>
+<tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -907,7 +1046,7 @@ Executes one Microsoft Graph JSON batch request against /$batch endpoint (permis
 
 ### GetCopyItemOperation
 
-Reads status of one asynchronous copy/move monitor URL returned by Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Reads status of one asynchronous copy/move monitor URL returned by Microsoft Graph (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -925,10 +1064,28 @@ Reads status of one asynchronous copy/move monitor URL returned by Microsoft Gra
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
 </tr>
 <tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
+</tr>
+<tr>
 <td>includeMonitorBody</td><td>true includes parsed monitor response body when present.</td>
 </tr>
 <tr>
 <td>monitorUrl</td><td>Operation monitor URL returned by CopyDriveItem, usually from data.copyRequest.monitorUrl.</td>
+</tr>
+<tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>tenantId</td><td>Azure Entra tenant id used for app-only token acquisition.</td>
@@ -964,7 +1121,7 @@ Resolves a delegated or app-only Microsoft Graph access token for SharePoint Onl
 
 ### GetItem
 
-Retrieves one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
+Retrieves one SharePoint drive item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -980,6 +1137,9 @@ Retrieves one SharePoint Online drive item through Microsoft Graph. (Graph permi
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
@@ -1000,7 +1160,22 @@ Retrieves one SharePoint Online drive item through Microsoft Graph. (Graph permi
 <td>listName</td><td>List display name or internal name used to resolve associated drive.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
 <td>selectFields</td><td>Optional comma-separated list of Graph driveItem properties to select.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -1240,7 +1415,7 @@ Lists SharePoint list items through Microsoft Graph (online) or SharePoint REST 
 
 ### ListGetItemsDelta
 
-Lists list item changes through Microsoft Graph delta API. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+Lists list item changes through Microsoft Graph delta API (online), with graceful fallback when unsupported on-prem. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -1256,6 +1431,9 @@ Lists list item changes through Microsoft Graph delta API. (Graph permissions Si
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>deltaLink</td><td>Optional full @odata.deltaLink from previous call. If provided, other query parameters are ignored.</td>
@@ -1279,7 +1457,22 @@ Lists list item changes through Microsoft Graph delta API. (Graph permissions Si
 <td>maxPages</td><td>Maximum number of pages fetched before stopping pagination.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
 <td>selectFields</td><td>Optional comma-separated list of Graph listItem properties to select.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -1363,7 +1556,7 @@ Lists permissions of one SharePoint drive item through Microsoft Graph (online),
 
 ### ListItems
 
-Lists SharePoint Online drive items through Microsoft Graph with pagination and projection. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
+Lists SharePoint drive items through Microsoft Graph (online) or SharePoint REST (on-prem) with pagination and projection. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -1379,6 +1572,9 @@ Lists SharePoint Online drive items through Microsoft Graph with pagination and 
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
@@ -1402,13 +1598,28 @@ Lists SharePoint Online drive items through Microsoft Graph with pagination and 
 <td>maxPages</td><td>Maximum number of Graph pages fetched before stopping pagination.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
 <td>orderBy</td><td>Optional OData order by expression.</td>
 </tr>
 <tr>
 <td>parentItemId</td><td>Parent drive item id. Use root or leave empty to list root children.</td>
 </tr>
 <tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
 <td>selectFields</td><td>Optional comma-separated list of Graph driveItem properties to select.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -1429,7 +1640,7 @@ Lists SharePoint Online drive items through Microsoft Graph with pagination and 
 
 ### ListItemsDelta
 
-Lists drive item changes through Microsoft Graph delta API. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
+Lists drive item changes through Microsoft Graph delta API (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -1445,6 +1656,9 @@ Lists drive item changes through Microsoft Graph delta API. (Graph permissions F
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>deltaLink</td><td>Optional full @odata.deltaLink from previous call. If provided, other query parameters are ignored.</td>
@@ -1471,10 +1685,25 @@ Lists drive item changes through Microsoft Graph delta API. (Graph permissions F
 <td>maxPages</td><td>Maximum number of pages fetched before stopping pagination.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
 <td>parentItemId</td><td>Parent drive item id for scoped delta. Use root for drive root.</td>
 </tr>
 <tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
 <td>selectFields</td><td>Optional comma-separated list of Graph driveItem properties to select.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -1495,7 +1724,7 @@ Lists drive item changes through Microsoft Graph delta API. (Graph permissions F
 
 ### ListItemVersions
 
-Lists versions of one drive item through Microsoft Graph with pagination. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
+Lists versions of one drive item through Microsoft Graph with pagination (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.Read.All|Files.ReadWrite.All|Sites.Read.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -1511,6 +1740,9 @@ Lists versions of one drive item through Microsoft Graph with pagination. (Graph
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
@@ -1532,6 +1764,21 @@ Lists versions of one drive item through Microsoft Graph with pagination. (Graph
 </tr>
 <tr>
 <td>maxPages</td><td>Maximum number of pages fetched before stopping pagination.</td>
+</tr>
+<tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -1687,7 +1934,7 @@ Lists SharePoint site lists through Microsoft Graph (online) or SharePoint REST 
 
 ### MoveItem
 
-Moves or renames one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Moves or renames one SharePoint drive item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -1703,6 +1950,9 @@ Moves or renames one SharePoint Online drive item through Microsoft Graph. (Grap
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>destinationParentItemId</td><td>Optional destination parent item id. Use root to move under drive root.</td>
@@ -1732,10 +1982,25 @@ Moves or renames one SharePoint Online drive item through Microsoft Graph. (Grap
 <td>newName</td><td>Optional new file/folder name.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
 <td>returnMovedItem</td><td>true reloads moved item with optional property selection before returning.</td>
 </tr>
 <tr>
 <td>selectFields</td><td>Optional comma-separated list of Graph driveItem properties to select.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -1753,7 +2018,7 @@ Moves or renames one SharePoint Online drive item through Microsoft Graph. (Grap
 
 ### ResolveLibrary
 
-Resolves a SharePoint Online drive by site and drive identifiers using Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All|Files.Read.All|Files.ReadWrite.All)
+Resolves a SharePoint drive/library by site and drive identifiers using Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All|Files.Read.All|Files.ReadWrite.All)
 
 **variables**
 
@@ -1771,6 +2036,9 @@ Resolves a SharePoint Online drive by site and drive identifiers using Microsoft
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
 </tr>
 <tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
+</tr>
+<tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
 </tr>
 <tr>
@@ -1781,6 +2049,21 @@ Resolves a SharePoint Online drive by site and drive identifiers using Microsoft
 </tr>
 <tr>
 <td>listName</td><td>List display name or internal name used to resolve the associated drive.</td>
+</tr>
+<tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -1903,7 +2186,7 @@ Resolves a SharePoint site by hostname and path using Microsoft Graph (online) o
 
 ### RestoreItemVersion
 
-Restores one historical version of a drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Restores one historical version of a drive item through Microsoft Graph (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -1919,6 +2202,9 @@ Restores one historical version of a drive item through Microsoft Graph. (Graph 
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
@@ -1939,6 +2225,21 @@ Restores one historical version of a drive item through Microsoft Graph. (Graph 
 <td>listName</td><td>List display name or internal name used to resolve associated drive.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
+</tr>
+<tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
 </tr>
 <tr>
@@ -1957,7 +2258,7 @@ Restores one historical version of a drive item through Microsoft Graph. (Graph 
 
 ### UpdateItem
 
-Updates one SharePoint Online drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Updates one SharePoint drive item through Microsoft Graph (online) or SharePoint REST move/rename APIs (on-prem). (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -1973,6 +2274,9 @@ Updates one SharePoint Online drive item through Microsoft Graph. (Graph permiss
 </tr>
 <tr>
 <td>clientSecret</td><td>Azure Entra application client secret used for app-only token acquisition.</td>
+</tr>
+<tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
 </tr>
 <tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
@@ -1993,10 +2297,25 @@ Updates one SharePoint Online drive item through Microsoft Graph. (Graph permiss
 <td>listName</td><td>List display name or internal name used to resolve associated drive.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
+</tr>
+<tr>
 <td>returnUpdatedItem</td><td>true reloads updated item with optional property selection before returning.</td>
 </tr>
 <tr>
 <td>selectFields</td><td>Optional comma-separated list of Graph driveItem properties to select.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -2089,7 +2408,7 @@ Updates one SharePoint list item through Microsoft Graph (online) or SharePoint 
 
 ### UploadItemContent
 
-Uploads one SharePoint Online drive file content through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Uploads one SharePoint drive file content through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -2113,6 +2432,9 @@ Uploads one SharePoint Online drive file content through Microsoft Graph. (Graph
 <td>contentType</td><td>Content type sent to Graph content endpoint.</td>
 </tr>
 <tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
+</tr>
+<tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
 </tr>
 <tr>
@@ -2134,13 +2456,28 @@ Uploads one SharePoint Online drive file content through Microsoft Graph. (Graph
 <td>listName</td><td>List display name or internal name used to resolve associated drive.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
 <td>parentItemId</td><td>Parent drive item id used when itemId is empty. Use root or leave empty for drive root.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
 </tr>
 <tr>
 <td>returnUploadedItem</td><td>true reloads uploaded item with optional property selection before returning.</td>
 </tr>
 <tr>
 <td>selectFields</td><td>Optional comma-separated list of Graph driveItem properties to select.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -2158,7 +2495,7 @@ Uploads one SharePoint Online drive file content through Microsoft Graph. (Graph
 
 ### UploadItemLargeContent
 
-Uploads one SharePoint Online drive file using Graph upload session and chunk transfer. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+Uploads one SharePoint drive file using Graph upload session (online) or SharePoint REST file write (on-prem). (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 
 **variables**
 
@@ -2188,6 +2525,9 @@ Uploads one SharePoint Online drive file using Graph upload session and chunk tr
 <td>contentType</td><td>Content type sent for each upload chunk.</td>
 </tr>
 <tr>
+<td>cookieHeader</td><td>Optional Cookie header for on-prem forms authentication.</td>
+</tr>
+<tr>
 <td>driveId</td><td>Optional drive identifier. If provided, driveName/listId/listName are ignored.</td>
 </tr>
 <tr>
@@ -2212,13 +2552,28 @@ Uploads one SharePoint Online drive file using Graph upload session and chunk tr
 <td>listName</td><td>List display name or internal name used to resolve associated drive.</td>
 </tr>
 <tr>
+<td>onPremPassword</td><td>Optional technical password for on-prem basic authentication.</td>
+</tr>
+<tr>
+<td>onPremProtocol</td><td>URL scheme fallback for on-prem mode when siteBaseUrl is not provided.</td>
+</tr>
+<tr>
+<td>onPremUsername</td><td>Optional technical username for on-prem basic authentication.</td>
+</tr>
+<tr>
 <td>parentItemId</td><td>Parent drive item id used when itemId is empty. Use root or leave empty for drive root.</td>
+</tr>
+<tr>
+<td>provider</td><td>Backend provider selection graph or onprem.</td>
 </tr>
 <tr>
 <td>returnUploadedItem</td><td>true reloads uploaded item with optional property selection before returning.</td>
 </tr>
 <tr>
 <td>selectFields</td><td>Optional comma-separated list of Graph driveItem properties to select.</td>
+</tr>
+<tr>
+<td>siteBaseUrl</td><td>Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.</td>
 </tr>
 <tr>
 <td>siteHostname</td><td>SharePoint Online hostname when resolving siteId, for example contoso.sharepoint.com.</td>
@@ -2233,4 +2588,5 @@ Uploads one SharePoint Online drive file using Graph upload session and chunk tr
 <td>tenantId</td><td>Azure Entra tenant id used for app-only token acquisition.</td>
 </tr>
 </table>
+
 

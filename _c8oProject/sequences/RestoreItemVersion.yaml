@@ -1,443 +1,47 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Restores one historical version of a drive item through Microsoft Graph. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
+comment: Restores one historical version of a drive item through Microsoft Graph (online), with graceful fallback when unsupported on-prem. (Graph permissions Files.ReadWrite.All|Sites.ReadWrite.All)
 ↓inputVars [steps.InputVariablesStep-1772719795520]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
 ↓ExecuteRestoreDriveItemVersion [steps.SimpleStep-1772719795542]: 
   comment: Resolves site and drive then calls restoreVersion action on the selected version id.
   expression: |
-    'var gs_isBlank = function(value) {
-    	return value === null || value === undefined || String(value).trim().length === 0;
-    };
-    
-    var gs_safeString = function(value) {
-    	return value === null || value === undefined ? "" : String(value);
-    };
-    
-    var gs_defaultString = function(value, defaultValue) {
-    	return gs_isBlank(value) ? defaultValue : String(value);
-    };
-    
-    var gs_require = function(name, value) {
-    	if (gs_isBlank(value)) {
-    		throw new java.lang.IllegalArgumentException("Missing required input: " + name);
-    	}
-    	return String(value);
-    };
-    
-    var gs_toBoolean = function(value, defaultValue) {
-    	if (value === null || value === undefined || String(value).trim().length === 0) {
-    		return defaultValue === true;
-    	}
-    	var normalized = String(value).toLowerCase();
-    	return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "y";
-    };
-    
-    var gs_parseInteger = function(name, value, defaultValue) {
-    	if (gs_isBlank(value)) {
-    		return defaultValue;
-    	}
-    	var parsed = parseInt(String(value), 10);
-    	if (isNaN(parsed)) {
-    		throw new java.lang.IllegalArgumentException("Invalid integer for " + name + ": " + value);
-    	}
-    	return parsed;
-    };
-    
-    var gs_errorClass = function(error) {
-    	try {
-    		if (error && error.javaException) {
-    			return String(error.javaException.getClass().getName());
-    		}
-    		if (error && error.getClass) {
-    			return String(error.getClass().getName());
-    		}
-    	} catch (ignore) {
-    	}
-    	return "";
-    };
-    
-    var gs_responseOk = function(graphOperation, tokenMode, requiredPermission, data) {
-    	return {
-    		ok: true,
-    		status: "OK",
-    		graphOperation: graphOperation,
-    		tokenMode: tokenMode,
-    		requiredPermission: requiredPermission,
-    		data: data
-    	};
-    };
-    
-    var gs_responseError = function(graphOperation, tokenMode, requiredPermission, error) {
-    	var message = "";
-    	try {
-    		message = String(error.message);
-    	} catch (ignoreMessage) {
-    		message = String(error);
-    	}
-    	return {
-    		ok: false,
-    		status: "ERROR",
-    		graphOperation: graphOperation,
-    		tokenMode: tokenMode,
-    		requiredPermission: requiredPermission,
-    		errorClass: gs_errorClass(error),
-    		errorMessage: message
-    	};
-    };
-    
-    var gs_readAll = function(inputStream) {
-    	if (inputStream === null) {
-    		return "";
-    	}
-    	var scanner = new java.util.Scanner(inputStream, "UTF-8").useDelimiter("\\A");
-    	try {
-    		return scanner.hasNext() ? String(scanner.next()) : "";
-    	} finally {
-    		try {
-    			scanner.close();
-    		} catch (ignoreScanner) {
-    		}
-    	}
-    };
-    
-    var gs_urlEncode = function(value) {
-    	return java.net.URLEncoder.encode(String(value), "UTF-8");
-    };
-    
-    var gs_encodePathSegment = function(value) {
-    	return String(gs_urlEncode(value)).replace(/\+/g, "%20");
-    };
-    
-    var gs_appendQueryParam = function(url, name, value) {
-    	if (gs_isBlank(value)) {
-    		return url;
-    	}
-    	var separator = url.indexOf("?") >= 0 ? "&" : "?";
-    	return url + separator + gs_encodePathSegment(name) + "=" + gs_encodePathSegment(value);
-    };
-    
-    var gs_httpRequest = function(method, endpoint, bearerToken, payload, contentType, accept, headers) {
-    	var url = new java.net.URL(String(endpoint));
-    	var connection = url.openConnection();
-    	var normalizedMethod = String(method).toUpperCase();
-    	var methodToUse = normalizedMethod;
-    	var patchOverride = false;
-    
-    	try {
-    		connection.setRequestMethod(methodToUse);
-    	} catch (methodError) {
-    		if (normalizedMethod === "PATCH") {
-    			methodToUse = "POST";
-    			patchOverride = true;
-    			connection.setRequestMethod(methodToUse);
-    		} else {
-    			throw methodError;
-    		}
-    	}
-    
-    	connection.setDoInput(true);
-    	connection.setUseCaches(false);
-    
-    	if (!gs_isBlank(accept)) {
-    		connection.setRequestProperty("Accept", String(accept));
-    	}
-    	if (!gs_isBlank(bearerToken)) {
-    		connection.setRequestProperty("Authorization", "Bearer " + String(bearerToken));
-    	}
-    	if (patchOverride) {
-    		connection.setRequestProperty("X-HTTP-Method-Override", "PATCH");
-    	}
-    	if (headers !== null && headers !== undefined) {
-    		for (var headerName in headers) {
-    			if (headers.hasOwnProperty(headerName)) {
-    				var headerValue = headers[headerName];
-    				if (!gs_isBlank(headerValue)) {
-    					connection.setRequestProperty(String(headerName), String(headerValue));
-    				}
-    			}
-    		}
-    	}
-    
-    	if (payload !== null && payload !== undefined) {
-    		connection.setDoOutput(true);
-    		if (!gs_isBlank(contentType)) {
-    			connection.setRequestProperty("Content-Type", String(contentType));
-    		}
-    		var output = connection.getOutputStream();
-    		try {
-    			output.write(new java.lang.String(String(payload)).getBytes("UTF-8"));
-    		} finally {
-    			output.close();
-    		}
-    	}
-    
-    	var statusCode = connection.getResponseCode();
-    	var body = gs_readAll(statusCode >= 200 && statusCode < 300 ? connection.getInputStream() : connection.getErrorStream());
-    	return {
-    		statusCode: statusCode,
-    		body: body,
-    		location: gs_safeString(connection.getHeaderField("Location")),
-    		retryAfter: gs_safeString(connection.getHeaderField("Retry-After")),
-    		requestId: gs_safeString(connection.getHeaderField("request-id")),
-    		clientRequestId: gs_safeString(connection.getHeaderField("client-request-id"))
-    	};
-    };
-    
-    var gs_graphGetJson = function(endpoint, token) {
-    	var result = gs_httpRequest("GET", endpoint, token, null, "", "application/json", null);
-    	if (result.statusCode < 200 || result.statusCode >= 300) {
-    		throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
-    	}
-    	if (gs_isBlank(result.body)) {
-    		return {};
-    	}
-    	return JSON.parse(result.body);
-    };
-    
-    var gs_graphPostJson = function(endpoint, token, payloadObject, headers) {
-    	var payload = payloadObject === null || payloadObject === undefined ? "{}" : JSON.stringify(payloadObject);
-    	var result = gs_httpRequest("POST", endpoint, token, payload, "application/json", "application/json", headers);
-    	if (result.statusCode < 200 || result.statusCode >= 300) {
-    		throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
-    	}
-    	if (gs_isBlank(result.body)) {
-    		return {};
-    	}
-    	return JSON.parse(result.body);
-    };
-    
-    var gs_graphDelete = function(endpoint, token) {
-    	return gs_httpRequest("DELETE", endpoint, token, null, "", "application/json", null);
-    };
-    
-    var gs_acquireAppToken = function(tenantIdValue, clientIdValue, clientSecretValue, scopeValue) {
-    	var endpoint = "https://login.microsoftonline.com/" + gs_require("tenantId", tenantIdValue) + "/oauth2/v2.0/token";
-    	var payload =
-    		"client_id=" + gs_urlEncode(gs_require("clientId", clientIdValue)) +
-    		"&client_secret=" + gs_urlEncode(gs_require("clientSecret", clientSecretValue)) +
-    		"&scope=" + gs_urlEncode(gs_defaultString(scopeValue, "https://graph.microsoft.com/.default")) +
-    		"&grant_type=client_credentials";
-    
-    	var tokenResponse = gs_httpRequest("POST", endpoint, "", payload, "application/x-www-form-urlencoded", "application/json", null);
-    	if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
-    		throw new java.lang.RuntimeException("Token endpoint failed (" + tokenResponse.statusCode + "): " + tokenResponse.body);
-    	}
-    
-    	var parsed = JSON.parse(tokenResponse.body);
-    	if (!parsed || gs_isBlank(parsed.access_token)) {
-    		throw new java.lang.RuntimeException("Token endpoint returned no access_token");
-    	}
-    
-    	return {
-    		mode: "application",
-    		token: String(parsed.access_token),
-    		tokenType: gs_safeString(parsed.token_type),
-    		expiresIn: parsed.expires_in === undefined ? 0 : parsed.expires_in,
-    		scope: gs_safeString(parsed.scope)
-    	};
-    };
-    
-    var gs_resolveToken = function(accessTokenValue, tenantIdValue, clientIdValue, clientSecretValue) {
-    	if (!gs_isBlank(accessTokenValue)) {
-    		return {
-    			mode: "delegated",
-    			token: String(accessTokenValue),
-    			tokenType: "Bearer",
-    			expiresIn: 0,
-    			scope: ""
-    		};
-    	}
-    	return gs_acquireAppToken(tenantIdValue, clientIdValue, clientSecretValue, "https://graph.microsoft.com/.default");
-    };
-    
-    var gs_normalizeSitePath = function(sitePathValue) {
-    	var rawPath = gs_require("sitePath", sitePathValue).trim();
-    	if (rawPath.length === 0) {
-    		throw new java.lang.IllegalArgumentException("sitePath cannot be empty");
-    	}
-    	if (rawPath.charAt(0) !== "/") {
-    		rawPath = "/" + rawPath;
-    	}
-    	if (rawPath.length > 1 && rawPath.charAt(rawPath.length - 1) === "/") {
-    		rawPath = rawPath.substring(0, rawPath.length - 1);
-    	}
-    	return rawPath;
-    };
-    
-    var gs_encodeSitePath = function(sitePathValue) {
-    	if (sitePathValue === "/") {
-    		return "/";
-    	}
-    	var parts = String(sitePathValue).split("/");
-    	var encodedParts = [];
-    	var i;
-    	for (i = 0; i < parts.length; i++) {
-    		if (parts[i].length > 0) {
-    			encodedParts.push(gs_encodePathSegment(parts[i]));
-    		}
-    	}
-    	return "/" + encodedParts.join("/");
-    };
-    
-    var gs_odataEscapeString = function(value) {
-    	return String(value).split("''").join("''");
-    };
-    
-    var gs_splitCsv = function(csvValue) {
-    	if (gs_isBlank(csvValue)) {
-    		return [];
-    	}
-    	var rawParts = String(csvValue).split(",");
-    	var normalized = [];
-    	var i;
-    	for (i = 0; i < rawParts.length; i++) {
-    		var trimmed = String(rawParts[i]).trim();
-    		if (trimmed.length > 0) {
-    			normalized.push(trimmed);
-    		}
-    	}
-    	return normalized;
-    };
-    
-    var gs_parseJsonObject = function(name, rawJson) {
-    	var source = gs_require(name, rawJson);
-    	var parsed = null;
-    	try {
-    		parsed = JSON.parse(String(source));
-    	} catch (parseError) {
-    		throw new java.lang.IllegalArgumentException("Invalid JSON for " + name + ": " + gs_safeString(parseError.message));
-    	}
-    	if (parsed === null || parsed === undefined || parsed instanceof Array || typeof parsed !== "object") {
-    		throw new java.lang.IllegalArgumentException(name + " must be a JSON object");
-    	}
-    	return parsed;
-    };
-    
-    var gs_resolveSite = function(token, siteIdValue, siteHostnameValue, sitePathValue) {
-    	var resolvedSiteId = gs_safeString(siteIdValue);
-    	var resolvedSiteHostname = "";
-    	var resolvedSitePath = "";
-    
-    	if (gs_isBlank(resolvedSiteId)) {
-    		resolvedSiteHostname = gs_require("siteHostname", siteHostnameValue).toLowerCase();
-    		resolvedSitePath = gs_normalizeSitePath(sitePathValue);
-    		var siteEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" +
-    			resolvedSiteHostname +
-    			":" +
-    			gs_encodeSitePath(resolvedSitePath) +
-    			"?$select=id,webUrl,name,displayName";
-    		var siteObject = gs_graphGetJson(siteEndpoint, token);
-    		resolvedSiteId = gs_require("siteId", siteObject.id);
-    	}
-    
-    	return {
-    		siteId: resolvedSiteId,
-    		siteHostname: resolvedSiteHostname,
-    		sitePath: resolvedSitePath
-    	};
-    };
-    
-    var gs_resolveList = function(token, resolvedSiteId, listIdValue, listNameValue) {
-    	var resolvedListId = gs_safeString(listIdValue);
-    	var requestedListName = gs_safeString(listNameValue);
-    	if (gs_isBlank(resolvedListId) && gs_isBlank(requestedListName)) {
-    		throw new java.lang.IllegalArgumentException("Provide listId or listName");
-    	}
-    
-    	var listObject = null;
-    	if (!gs_isBlank(resolvedListId)) {
-    		var byIdEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
-    			"/lists/" + gs_encodePathSegment(resolvedListId) +
-    			"?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
-    		listObject = gs_graphGetJson(byIdEndpoint, token);
-    	} else {
-    		var queryEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
-    			"/lists?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
-    		var lookup = gs_odataEscapeString(requestedListName);
-    		queryEndpoint = gs_appendQueryParam(queryEndpoint, "$filter", "displayName eq ''" + lookup + "'' or name eq ''" + lookup + "''");
-    		var queryObject = gs_graphGetJson(queryEndpoint, token);
-    		if (!(queryObject.value instanceof Array) || queryObject.value.length === 0) {
-    			throw new java.lang.RuntimeException("List not found: " + requestedListName);
-    		}
-    		listObject = queryObject.value[0];
-    		resolvedListId = gs_safeString(listObject.id);
-    	}
-    
-    	return {
-    		listId: gs_safeString(resolvedListId),
-    		listName: gs_safeString(listObject.name),
-    		listDisplayName: gs_safeString(listObject.displayName),
-    		listWebUrl: gs_safeString(listObject.webUrl),
-    		listInfo: listObject.list === undefined || listObject.list === null ? {} : listObject.list,
-    		sharepointIds: listObject.sharepointIds === undefined || listObject.sharepointIds === null ? {} : listObject.sharepointIds
-    	};
-    };
-    
-    var gs_findDriveByName = function(token, resolvedSiteId, driveNameValue) {
-    	var endpoint =
-    		"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
-    		"/drives?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
-    	var drivesResponse = gs_graphGetJson(endpoint, token);
-    	if (!(drivesResponse.value instanceof Array) || drivesResponse.value.length === 0) {
-    		throw new java.lang.RuntimeException("No drive found for site: " + resolvedSiteId);
-    	}
-    
-    	var wantedName = gs_safeString(driveNameValue).toLowerCase();
-    	var i;
-    	for (i = 0; i < drivesResponse.value.length; i++) {
-    		if (gs_safeString(drivesResponse.value[i].name).toLowerCase() === wantedName) {
-    			return drivesResponse.value[i];
-    		}
-    	}
-    	throw new java.lang.RuntimeException("Drive not found: " + driveNameValue);
-    };
-    
-    var gs_resolveDrive = function(token, siteObject, driveIdValue, driveNameValue, listIdValue, listNameValue) {
-    	var explicitDriveId = gs_safeString(driveIdValue);
-    	var requestedDriveName = gs_safeString(driveNameValue);
-    	var explicitListId = gs_safeString(listIdValue);
-    	var requestedListName = gs_safeString(listNameValue);
-    
-    	if (gs_isBlank(explicitDriveId) && gs_isBlank(requestedDriveName) && gs_isBlank(explicitListId) && gs_isBlank(requestedListName)) {
-    		throw new java.lang.IllegalArgumentException("Provide driveId, driveName, listId or listName");
-    	}
-    
-    	var resolvedList = null;
-    	var resolvedDrive = null;
-    
-    	if (!gs_isBlank(explicitDriveId)) {
-    		var byIdEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(siteObject.siteId) +
-    			"/drives/" + gs_encodePathSegment(explicitDriveId) +
-    			"?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
-    		resolvedDrive = gs_graphGetJson(byIdEndpoint, token);
-    	} else if (!gs_isBlank(explicitListId) || !gs_isBlank(requestedListName)) {
-    		resolvedList = gs_resolveList(token, siteObject.siteId, explicitListId, requestedListName);
-    		var byListEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(siteObject.siteId) +
-    			"/lists/" + gs_encodePathSegment(resolvedList.listId) +
-    			"/drive?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
-    		resolvedDrive = gs_graphGetJson(byListEndpoint, token);
-    	} else {
-    		resolvedDrive = gs_findDriveByName(token, siteObject.siteId, requestedDriveName);
-    	}
-    
-    	return {
-    		drive: resolvedDrive,
-    		list: resolvedList
-    	};
-    };
+    'include("js/sharepoint_provider.js");
+    include("js/sharepoint_graph_common.js");
     
     var graphOperation = "restore_drive_item_version";
     var requiredPermission = "Files.ReadWrite.All|Sites.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
+    var requestedProvider = sppr_normalizeProvider(provider, "graph");
     
-    try {
+    if (requestedProvider === "onprem") {
+    	tokenMode = "onprem";
+    	try {
+    		sppr_ensureOnPremDispatch();
+    		response = sppr_onPremRestoreDriveItemVersion({
+    			siteBaseUrl: siteBaseUrl,
+    			siteHostname: siteHostname,
+    			sitePath: sitePath,
+    			onPremProtocol: onPremProtocol,
+    			driveId: driveId,
+    			driveName: driveName,
+    			listId: listId,
+    			listName: listName,
+    			itemId: itemId,
+    			versionId: versionId,
+    			includeItemSnapshot: includeItemSnapshot,
+    			includeRawItem: "false",
+    			accessToken: accessToken,
+    			onPremUsername: onPremUsername,
+    			onPremPassword: onPremPassword,
+    			cookieHeader: cookieHeader
+    		});
+    	} catch (onPremError) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, onPremError);
+    	}
+    } else {
+    	try {
     var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
     tokenMode = tokenInfo.mode;
     
@@ -453,16 +57,17 @@ comment: Restores one historical version of a drive item through Microsoft Graph
     var resolvedDrive = resolvedDriveData.drive;
     var resolvedList = resolvedDriveData.list;
     
-    var restoreEndpoint = "https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(gs_safeString(resolvedDrive.id)) + "/items/" + gs_encodePathSegment(targetItemId) + "/versions/" + gs_encodePathSegment(targetVersionId) + "/restoreVersion";
-    var restoreResult = gs_httpRequest("POST", restoreEndpoint, tokenInfo.token, null, "", "application/json", null);
+    var restoreRequestInfo = gs_graphDriveItemVersionRestoreRequestInfo(tokenInfo.token, gs_safeString(resolvedDrive.id), targetItemId, targetVersionId);
+    var restoreResult = gs_httpRequestInfoInternal(tokenInfo.token, restoreRequestInfo, null, null, "", "application/json", null, false);
     if (restoreResult.statusCode < 200 || restoreResult.statusCode >= 300) {
     	throw new java.lang.RuntimeException("Graph restoreVersion failed (" + restoreResult.statusCode + "): " + restoreResult.body);
     }
     
     var itemSnapshot = {};
     if (includeItemSnapshotFlag) {
-    	var itemEndpoint = "https://graph.microsoft.com/v1.0/drives/" + gs_encodePathSegment(gs_safeString(resolvedDrive.id)) + "/items/" + gs_encodePathSegment(targetItemId) + "?$select=id,name,webUrl,size,eTag,cTag,createdDateTime,lastModifiedDateTime,file,folder,parentReference,fileSystemInfo,shared,sharepointIds";
-    	itemSnapshot = gs_graphGetJson(itemEndpoint, tokenInfo.token);
+    	var itemRequestInfo = gs_graphDriveItemGetRequestInfo(tokenInfo.token, gs_safeString(resolvedDrive.id), targetItemId);
+    	gs_graphAddQueryParameter(itemRequestInfo, "$select", "id,name,webUrl,size,eTag,cTag,createdDateTime,lastModifiedDateTime,file,folder,parentReference,fileSystemInfo,shared,sharepointIds");
+    	itemSnapshot = gs_graphGetJsonRequestInfo(itemRequestInfo, tokenInfo.token);
     }
     
     response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
@@ -484,8 +89,9 @@ comment: Restores one historical version of a drive item through Microsoft Graph
     	},
     	itemSnapshot: itemSnapshot
     });
-    } catch (e) {
-    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    	} catch (e) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    	}
     }'
 ↓response [steps.JsonToXmlStep-1772719795570]: 
   comment: Converts the JS response object into XML output.
@@ -536,6 +142,38 @@ comment: Restores one historical version of a drive item through Microsoft Graph
   comment: true fetches current item snapshot after restore operation.
   description: Include item snapshot
   value: false
+↓provider [variables.RequestableVariable-1773062154687]: 
+  comment: Backend provider selection graph or onprem.
+  description: Provider selection graph or onprem
+  value: ${lib_Microsoft_Sharepoint.provider}
+↓siteBaseUrl [variables.RequestableVariable-1773071757468]: 
+  comment: Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+  description: On-prem site base URL
+  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}
+↓onPremProtocol [variables.RequestableVariable-1773071757502]: 
+  comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+  description: On-prem protocol fallback
+  value: ${lib_Microsoft_Sharepoint.onPrem.protocol}
+↓onPremUsername [variables.RequestableVariable-1773071757537]: 
+  comment: Optional technical username for on-prem basic authentication.
+  description: On-prem technical username
+  value: ${lib_Microsoft_Sharepoint.onPrem.username}
+↓onPremPassword [variables.RequestableVariable-1773071757578]: 
+  comment: Optional technical password for on-prem basic authentication.
+  description: On-prem technical password
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb405245a4fafc73fbab6b6999c294cb356940c0e6fa2827adf0d777f2f4f3e526ac991
+  visibility: '-1'
+↓cookieHeader [variables.RequestableVariable-1773071757631]: 
+  comment: Optional Cookie header for on-prem forms authentication.
+  description: Optional on-prem Cookie header
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: '-1'
 ↓accessToken [variables.RequestableVariable-1772719796378]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token

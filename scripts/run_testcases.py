@@ -905,7 +905,7 @@ def main() -> int:
         "ListGetItemsDelta",
         dict(list_scope(), top="10", maxPages="1", expandFields="true"),
         mandatory=False,
-        enabled=not is_onprem_mode,
+        enabled=True,
         on_success=save_list_delta,
     )
     plan.run_step(
@@ -966,7 +966,7 @@ def main() -> int:
         "ListItemsDelta",
         dict(drive_scope(), parentItemId="root", top="20", maxPages="1"),
         mandatory=False,
-        enabled=not is_onprem_mode,
+        enabled=True,
         on_success=save_drive_delta,
     )
     plan.run_step(

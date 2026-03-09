@@ -190,23 +190,41 @@ function spop_escapeListTitle(value) {
 }
 
 function spop_buildSiteBaseUrl(siteBaseUrl, siteHostname, sitePath, protocol) {
-  if (!spop_isBlank(siteBaseUrl)) {
+  if (spop_isConfiguredValue(siteBaseUrl)) {
     return spop_trimTrailingSlash(siteBaseUrl);
   }
 
-  var host = spop_require("siteHostname", siteHostname).trim();
-  var rawScheme = spop_defaultString(protocol, "https").trim().toLowerCase();
-  var scheme = rawScheme;
-  if (rawScheme === "true" || rawScheme === "1") {
+  var host = spop_safeString(siteHostname).trim();
+  if (!spop_isConfiguredValue(host)) {
+    host = spop_getConnectorServer();
+  }
+  host = spop_require("siteHostname", host).trim();
+
+  var scheme = spop_normalizeProtocol(protocol, "");
+  if (spop_isBlank(scheme)) {
+    scheme = spop_getConnectorScheme();
+  }
+  if (spop_isBlank(scheme)) {
     scheme = "https";
-  } else if (rawScheme === "false" || rawScheme === "0") {
-    scheme = "http";
   }
-  var path = spop_normalizeSitePath(spop_defaultString(sitePath, "/"));
+
+  var port = spop_getConnectorPort();
+  var authority = host;
+  if (port > 0 && host.indexOf(":") < 0) {
+    if ((scheme === "http" && port !== 80) || (scheme === "https" && port !== 443)) {
+      authority = host + ":" + port;
+    }
+  }
+
+  var resolvedSitePath = sitePath;
+  if (!spop_isConfiguredValue(resolvedSitePath)) {
+    resolvedSitePath = spop_getConnectorBaseDir();
+  }
+  var path = spop_normalizeSitePath(spop_defaultString(resolvedSitePath, "/"));
   if (path === "/") {
-    return scheme + "://" + host;
+    return scheme + "://" + authority;
   }
-  return scheme + "://" + host + path;
+  return scheme + "://" + authority + path;
 }
 
 function spop_normalizeConnectorAuthenticationType(value) {
@@ -249,6 +267,76 @@ function spop_getOnPremConnector() {
   return null;
 }
 
+function spop_compileSymbolValue(expression) {
+  try {
+    var Engine = Packages.com.twinsoft.convertigo.engine.Engine;
+    if (Engine !== null && Engine !== undefined && Engine.theApp !== null && Engine.theApp !== undefined
+      && Engine.theApp.databaseObjectsManager !== null && Engine.theApp.databaseObjectsManager !== undefined) {
+      var compiled = Engine.theApp.databaseObjectsManager.getCompiledValue(String(expression));
+      return spop_safeString(compiled);
+    }
+  } catch (ignoreCompileSymbolValue) {
+  }
+  return "";
+}
+
+function spop_getOnPremUsernameSymbol() {
+  return spop_compileSymbolValue("${lib_Microsoft_Sharepoint.onPrem.username}");
+}
+
+function spop_getOnPremPasswordSymbol() {
+  return spop_compileSymbolValue("${lib_Microsoft_Sharepoint.onPrem.password.secret}");
+}
+
+function spop_getConnectorServer() {
+  var connector = spop_getOnPremConnector();
+  if (connector !== null && connector !== undefined && connector.getServer) {
+    return spop_safeString(connector.getServer()).trim();
+  }
+  return "";
+}
+
+function spop_getConnectorScheme() {
+  var connector = spop_getOnPremConnector();
+  if (connector !== null && connector !== undefined && connector.isHttps) {
+    return connector.isHttps() ? "https" : "http";
+  }
+  return "";
+}
+
+function spop_getConnectorPort() {
+  var connector = spop_getOnPremConnector();
+  if (connector !== null && connector !== undefined && connector.getPort) {
+    return connector.getPort();
+  }
+  return -1;
+}
+
+function spop_getConnectorBaseDir() {
+  var connector = spop_getOnPremConnector();
+  if (connector !== null && connector !== undefined && connector.getBaseDir) {
+    return spop_safeString(connector.getBaseDir()).trim();
+  }
+  return "";
+}
+
+function spop_normalizeProtocol(value, defaultValue) {
+  if (!spop_isConfiguredValue(value)) {
+    return spop_safeString(defaultValue).trim().toLowerCase();
+  }
+  var rawScheme = spop_safeString(value).trim().toLowerCase();
+  if (rawScheme === "true" || rawScheme === "1") {
+    return "https";
+  }
+  if (rawScheme === "false" || rawScheme === "0") {
+    return "http";
+  }
+  if (rawScheme === "http" || rawScheme === "https") {
+    return rawScheme;
+  }
+  return spop_safeString(defaultValue).trim().toLowerCase();
+}
+
 function spop_normalizeNtlmTransportMode(value) {
   var normalized = spop_defaultString(value, "").trim().toLowerCase();
   if (normalized === "connector" || normalized === "connectoronly" || normalized === "connector_only") {
@@ -264,6 +352,22 @@ function spop_normalizeNtlmTransportMode(value) {
     return "connector_then_httpclient";
   }
   return "connector_then_httpclient";
+}
+
+function spop_shouldPreferHttpClientNtlm(endpoint) {
+  var normalizedEndpoint = spop_safeString(endpoint).toLowerCase();
+  if (spop_isBlank(normalizedEndpoint)) {
+    return false;
+  }
+  return normalizedEndpoint.indexOf("/_api/web/getfolderbyserverrelativeurl(") >= 0
+    || normalizedEndpoint.indexOf("/_api/web/getfilebyserverrelativeurl(") >= 0
+    || normalizedEndpoint.indexOf("/_api/web/folders") >= 0
+    || normalizedEndpoint.indexOf("/files/") >= 0
+    || normalizedEndpoint.indexOf("/versions") >= 0
+    || normalizedEndpoint.indexOf("/getlistitemchangessincetoken") >= 0
+    || normalizedEndpoint.indexOf("/$value") >= 0
+    || normalizedEndpoint.indexOf("/moveto(") >= 0
+    || normalizedEndpoint.indexOf("/copyto(") >= 0;
 }
 
 function spop_getNtlmTransportMode() {
@@ -334,6 +438,8 @@ function spop_buildAuth(accessToken, username, password, cookieHeader) {
     connectorGivenPassword: null
   };
   var connectorAuthenticationType = spop_getConnectorAuthenticationType();
+  var resolvedUsername = spop_isConfiguredValue(username) ? String(username) : spop_getOnPremUsernameSymbol();
+  var resolvedPassword = spop_isConfiguredValue(password) ? String(password) : spop_getOnPremPasswordSymbol();
 
   if (spop_isConfiguredValue(accessToken)) {
     auth.mode = "onprem_bearer";
@@ -343,20 +449,20 @@ function spop_buildAuth(accessToken, username, password, cookieHeader) {
   if (auth.mode !== "onprem_bearer" && spop_isConfiguredValue(cookieHeader)) {
     auth.mode = "onprem_cookie";
     auth.headers.Cookie = String(cookieHeader);
-  } else if (auth.mode === "onprem_anonymous" && spop_isConfiguredValue(username) && spop_isConfiguredValue(password)) {
+  } else if (auth.mode === "onprem_anonymous" && spop_isConfiguredValue(resolvedUsername) && spop_isConfiguredValue(resolvedPassword)) {
     if (connectorAuthenticationType === "none" || connectorAuthenticationType === "anonymous") {
       auth.mode = "onprem_basic";
-      var raw = String(username) + ":" + String(password);
+      var raw = String(resolvedUsername) + ":" + String(resolvedPassword);
       var encoded = java.util.Base64.getEncoder().encodeToString(new java.lang.String(raw).getBytes("UTF-8"));
       auth.headers.Authorization = "Basic " + String(encoded);
     } else if (connectorAuthenticationType === "ntlm") {
       auth.mode = "onprem_connector_ntlm";
-      auth.connectorGivenUser = String(username);
-      auth.connectorGivenPassword = String(password);
+      auth.connectorGivenUser = String(resolvedUsername);
+      auth.connectorGivenPassword = String(resolvedPassword);
     } else {
       auth.mode = "onprem_connector_basic";
-      auth.connectorGivenUser = String(username);
-      auth.connectorGivenPassword = String(password);
+      auth.connectorGivenUser = String(resolvedUsername);
+      auth.connectorGivenPassword = String(resolvedPassword);
     }
   } else if (auth.mode === "onprem_anonymous") {
     if (connectorAuthenticationType === "ntlm") {
@@ -685,13 +791,19 @@ function spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes
     var responseBytes = responseEntity === null ? java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 0) : EntityUtils.toByteArray(responseEntity);
     var locationHeader = response.getFirstHeader("Location");
     var etagHeader = response.getFirstHeader("ETag");
+    var contentTypeHeader = response.getFirstHeader("Content-Type");
+    var contentDispositionHeader = response.getFirstHeader("Content-Disposition");
+    var contentLengthHeader = response.getFirstHeader("Content-Length");
 
     return {
       statusCode: statusCode,
       body: binaryResponse === true ? "" : String(new java.lang.String(responseBytes, "UTF-8")),
       bytes: binaryResponse === true ? responseBytes : null,
       location: locationHeader === null ? "" : spop_safeString(locationHeader.getValue()),
-      etag: etagHeader === null ? "" : spop_safeString(etagHeader.getValue())
+      etag: etagHeader === null ? "" : spop_safeString(etagHeader.getValue()),
+      contentType: contentTypeHeader === null ? "" : spop_safeString(contentTypeHeader.getValue()),
+      contentDisposition: contentDispositionHeader === null ? "" : spop_safeString(contentDispositionHeader.getValue()),
+      contentLengthHeader: contentLengthHeader === null ? "" : spop_safeString(contentLengthHeader.getValue())
     };
   } finally {
     try {
@@ -824,7 +936,10 @@ function spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, cont
       body: rawBody,
       bytes: null,
       location: httpInfoElement === null ? "" : spop_findResponseHeaderValue(httpInfoElement, "Location"),
-      etag: httpInfoElement === null ? "" : spop_findResponseHeaderValue(httpInfoElement, "ETag")
+      etag: httpInfoElement === null ? "" : spop_findResponseHeaderValue(httpInfoElement, "ETag"),
+      contentType: httpInfoElement === null ? "" : spop_findResponseHeaderValue(httpInfoElement, "Content-Type"),
+      contentDisposition: httpInfoElement === null ? "" : spop_findResponseHeaderValue(httpInfoElement, "Content-Disposition"),
+      contentLengthHeader: httpInfoElement === null ? "" : spop_findResponseHeaderValue(httpInfoElement, "Content-Length")
     };
 
     if (binaryResponse === true) {
@@ -870,32 +985,54 @@ function spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, cont
 }
 
 function spop_httpRequest(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse) {
+  var effectiveHeaders = {};
+  var headerName;
+  if (headers !== null && headers !== undefined) {
+    for (headerName in headers) {
+      if (Object.prototype.hasOwnProperty.call(headers, headerName)) {
+        effectiveHeaders[headerName] = headers[headerName];
+      }
+    }
+  }
+  if (auth !== null && auth !== undefined && spop_safeString(auth.mode).indexOf("onprem_") === 0) {
+    if (effectiveHeaders["X-FORMS_BASED_AUTH_ACCEPTED"] === undefined && effectiveHeaders["x-forms_based_auth_accepted"] === undefined) {
+      effectiveHeaders["X-FORMS_BASED_AUTH_ACCEPTED"] = "f";
+    }
+  }
+
   if (auth !== null && auth !== undefined && auth.mode === "onprem_connector_ntlm") {
     var transportMode = spop_getNtlmTransportMode();
+    if (spop_shouldPreferHttpClientNtlm(endpoint)) {
+      if (transportMode === "connector_then_httpclient") {
+        transportMode = "httpclient_then_connector";
+      } else if (transportMode === "connector_only") {
+        transportMode = "httpclient_then_connector";
+      }
+    }
     var connectorResult = null;
     var clientResult = null;
 
     if (transportMode === "connector_only") {
-      return spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+      return spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, effectiveHeaders, binaryResponse);
     }
 
     if (transportMode === "httpclient_only") {
-      return spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+      return spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes, contentType, accept, effectiveHeaders, binaryResponse);
     }
 
     if (transportMode === "httpclient_then_connector") {
       try {
-        clientResult = spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+        clientResult = spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes, contentType, accept, effectiveHeaders, binaryResponse);
         if (clientResult.statusCode >= 200 && clientResult.statusCode < 300) {
           return clientResult;
         }
       } catch (ignoreHttpClientFirst) {
       }
-      return spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+      return spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, effectiveHeaders, binaryResponse);
     }
 
     try {
-      connectorResult = spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+      connectorResult = spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, effectiveHeaders, binaryResponse);
       if (connectorResult.statusCode >= 200 && connectorResult.statusCode < 300) {
         return connectorResult;
       }
@@ -907,7 +1044,7 @@ function spop_httpRequest(method, endpoint, auth, payloadBytes, contentType, acc
     }
 
     try {
-      return spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+      return spop_httpRequestViaHttpClient5Ntlm(method, endpoint, auth, payloadBytes, contentType, accept, effectiveHeaders, binaryResponse);
     } catch (httpClientFallbackError) {
       if (connectorResult !== null && connectorResult !== undefined) {
         return connectorResult;
@@ -916,7 +1053,7 @@ function spop_httpRequest(method, endpoint, auth, payloadBytes, contentType, acc
     }
   }
 
-  return spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, headers, binaryResponse);
+  return spop_httpRequestViaConnector(method, endpoint, auth, payloadBytes, contentType, accept, effectiveHeaders, binaryResponse);
 }
 
 function spop_httpRequestJson(method, endpoint, auth, payloadJson, headers) {

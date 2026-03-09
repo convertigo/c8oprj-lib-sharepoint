@@ -1,359 +1,156 @@
 accessibility: Hidden
 authenticatedContextRequired: true
-comment: Resolves a SharePoint Online drive by site and drive identifiers using Microsoft Graph. (Graph permissions Sites.Read.All|Sites.ReadWrite.All|Files.Read.All|Files.ReadWrite.All)
+comment: Resolves a SharePoint drive/library by site and drive identifiers using Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All|Files.Read.All|Files.ReadWrite.All)
 ↓inputVars [steps.InputVariablesStep-1772719793276]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
 ↓ExecuteResolveDrive [steps.SimpleStep-1772719793299]: 
-  comment: Resolves site and drive identifiers through Microsoft Graph endpoints.
+  comment: Resolves site and drive identifiers through Microsoft Graph (online) or SharePoint REST (on-prem).
   expression: |
-    'var gs_isBlank = function(value) {
-    	return value === null || value === undefined || String(value).trim().length === 0;
-    };
-    
-    var gs_safeString = function(value) {
-    	return value === null || value === undefined ? "" : String(value);
-    };
-    
-    var gs_defaultString = function(value, defaultValue) {
-    	return gs_isBlank(value) ? defaultValue : String(value);
-    };
-    
-    var gs_require = function(name, value) {
-    	if (gs_isBlank(value)) {
-    		throw new java.lang.IllegalArgumentException("Missing required input: " + name);
-    	}
-    	return String(value);
-    };
-    
-    var gs_errorClass = function(error) {
-    	try {
-    		if (error && error.javaException) {
-    			return String(error.javaException.getClass().getName());
-    		}
-    		if (error && error.getClass) {
-    			return String(error.getClass().getName());
-    		}
-    	} catch (ignore) {
-    	}
-    	return "";
-    };
-    
-    var gs_responseOk = function(graphOperation, tokenMode, requiredPermission, data) {
-    	return {
-    		ok: true,
-    		status: "OK",
-    		graphOperation: graphOperation,
-    		tokenMode: tokenMode,
-    		requiredPermission: requiredPermission,
-    		data: data
-    	};
-    };
-    
-    var gs_responseError = function(graphOperation, tokenMode, requiredPermission, error) {
-    	var message = "";
-    	try {
-    		message = String(error.message);
-    	} catch (ignoreMessage) {
-    		message = String(error);
-    	}
-    	return {
-    		ok: false,
-    		status: "ERROR",
-    		graphOperation: graphOperation,
-    		tokenMode: tokenMode,
-    		requiredPermission: requiredPermission,
-    		errorClass: gs_errorClass(error),
-    		errorMessage: message
-    	};
-    };
-    
-    var gs_readAll = function(inputStream) {
-    	if (inputStream === null) {
-    		return "";
-    	}
-    	var scanner = new java.util.Scanner(inputStream, "UTF-8").useDelimiter("\\A");
-    	try {
-    		return scanner.hasNext() ? String(scanner.next()) : "";
-    	} finally {
-    		try {
-    			scanner.close();
-    		} catch (ignoreScanner) {
-    		}
-    	}
-    };
-    
-    var gs_urlEncode = function(value) {
-    	return java.net.URLEncoder.encode(String(value), "UTF-8");
-    };
-    
-    var gs_encodePathSegment = function(value) {
-    	return String(gs_urlEncode(value)).replace(/\+/g, "%20");
-    };
-    
-    var gs_appendQueryParam = function(url, name, value) {
-    	if (gs_isBlank(value)) {
-    		return url;
-    	}
-    	var separator = url.indexOf("?") >= 0 ? "&" : "?";
-    	return url + separator + gs_encodePathSegment(name) + "=" + gs_encodePathSegment(value);
-    };
-    
-    var gs_httpRequest = function(method, endpoint, bearerToken, payload, contentType, accept) {
-    	var url = new java.net.URL(String(endpoint));
-    	var connection = url.openConnection();
-    	connection.setRequestMethod(String(method));
-    	connection.setDoInput(true);
-    	connection.setUseCaches(false);
-    
-    	if (!gs_isBlank(accept)) {
-    		connection.setRequestProperty("Accept", String(accept));
-    	}
-    	if (!gs_isBlank(bearerToken)) {
-    		connection.setRequestProperty("Authorization", "Bearer " + String(bearerToken));
-    	}
-    
-    	if (payload !== null && payload !== undefined) {
-    		connection.setDoOutput(true);
-    		if (!gs_isBlank(contentType)) {
-    			connection.setRequestProperty("Content-Type", String(contentType));
-    		}
-    		var output = connection.getOutputStream();
-    		try {
-    			output.write(new java.lang.String(String(payload)).getBytes("UTF-8"));
-    		} finally {
-    			output.close();
-    		}
-    	}
-    
-    	var statusCode = connection.getResponseCode();
-    	var body = gs_readAll(statusCode >= 200 && statusCode < 300 ? connection.getInputStream() : connection.getErrorStream());
-    	return {
-    		statusCode: statusCode,
-    		body: body
-    	};
-    };
-    
-    var gs_graphGetJson = function(endpoint, token) {
-    	var result = gs_httpRequest("GET", endpoint, token, null, "", "application/json");
-    	if (result.statusCode < 200 || result.statusCode >= 300) {
-    		throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
-    	}
-    	if (gs_isBlank(result.body)) {
-    		return {};
-    	}
-    	return JSON.parse(result.body);
-    };
-    
-    var gs_acquireAppToken = function(tenantIdValue, clientIdValue, clientSecretValue, scopeValue) {
-    	var endpoint = "https://login.microsoftonline.com/" + gs_require("tenantId", tenantIdValue) + "/oauth2/v2.0/token";
-    	var payload =
-    		"client_id=" + gs_urlEncode(gs_require("clientId", clientIdValue)) +
-    		"&client_secret=" + gs_urlEncode(gs_require("clientSecret", clientSecretValue)) +
-    		"&scope=" + gs_urlEncode(gs_defaultString(scopeValue, "https://graph.microsoft.com/.default")) +
-    		"&grant_type=client_credentials";
-    
-    	var tokenResponse = gs_httpRequest("POST", endpoint, "", payload, "application/x-www-form-urlencoded", "application/json");
-    	if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
-    		throw new java.lang.RuntimeException("Token endpoint failed (" + tokenResponse.statusCode + "): " + tokenResponse.body);
-    	}
-    
-    	var parsed = JSON.parse(tokenResponse.body);
-    	if (!parsed || gs_isBlank(parsed.access_token)) {
-    		throw new java.lang.RuntimeException("Token endpoint returned no access_token");
-    	}
-    
-    	return {
-    		mode: "application",
-    		token: String(parsed.access_token),
-    		tokenType: gs_safeString(parsed.token_type),
-    		expiresIn: parsed.expires_in === undefined ? 0 : parsed.expires_in,
-    		scope: gs_safeString(parsed.scope)
-    	};
-    };
-    
-    var gs_resolveToken = function(accessTokenValue, tenantIdValue, clientIdValue, clientSecretValue) {
-    	if (!gs_isBlank(accessTokenValue)) {
-    		return {
-    			mode: "delegated",
-    			token: String(accessTokenValue),
-    			tokenType: "Bearer",
-    			expiresIn: 0,
-    			scope: ""
-    		};
-    	}
-    	return gs_acquireAppToken(tenantIdValue, clientIdValue, clientSecretValue, "https://graph.microsoft.com/.default");
-    };
-    
-    var gs_normalizeSitePath = function(sitePathValue) {
-    	var rawPath = gs_require("sitePath", sitePathValue).trim();
-    	if (rawPath.length === 0) {
-    		throw new java.lang.IllegalArgumentException("sitePath cannot be empty");
-    	}
-    	if (rawPath.charAt(0) !== "/") {
-    		rawPath = "/" + rawPath;
-    	}
-    	if (rawPath.length > 1 && rawPath.charAt(rawPath.length - 1) === "/") {
-    		rawPath = rawPath.substring(0, rawPath.length - 1);
-    	}
-    	return rawPath;
-    };
-    
-    var gs_encodeSitePath = function(sitePathValue) {
-    	if (sitePathValue === "/") {
-    		return "/";
-    	}
-    	var parts = String(sitePathValue).split("/");
-    	var encodedParts = [];
-    	var i;
-    	for (i = 0; i < parts.length; i++) {
-    		if (parts[i].length > 0) {
-    			encodedParts.push(gs_encodePathSegment(parts[i]));
-    		}
-    	}
-    	return "/" + encodedParts.join("/");
-    };
-    
-    var gs_odataEscapeString = function(value) {
-    	return String(value).split("''").join("''");
-    };
-    
-    var gs_normalizeDrive = function(driveObject) {
-    	if (driveObject === null || driveObject === undefined) {
-    		return {};
-    	}
-    	return {
-    		driveId: gs_safeString(driveObject.id),
-    		driveName: gs_safeString(driveObject.name),
-    		driveWebUrl: gs_safeString(driveObject.webUrl),
-    		driveType: gs_safeString(driveObject.driveType),
-    		createdDateTime: gs_safeString(driveObject.createdDateTime),
-    		lastModifiedDateTime: gs_safeString(driveObject.lastModifiedDateTime),
-    		sharepointIds: driveObject.sharepointIds === undefined || driveObject.sharepointIds === null ? {} : driveObject.sharepointIds,
-    		quota: driveObject.quota === undefined || driveObject.quota === null ? {} : driveObject.quota,
-    		owner: driveObject.owner === undefined || driveObject.owner === null ? {} : driveObject.owner
-    	};
-    };
-    
-    var gs_resolveSite = function(token, siteIdValue, siteHostnameValue, sitePathValue) {
-    	var resolvedSiteId = gs_safeString(siteIdValue);
-    	var resolvedSiteHostname = "";
-    	var resolvedSitePath = "";
-    
-    	if (gs_isBlank(resolvedSiteId)) {
-    		resolvedSiteHostname = gs_require("siteHostname", siteHostnameValue).toLowerCase();
-    		resolvedSitePath = gs_normalizeSitePath(sitePathValue);
-    		var siteEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" +
-    			resolvedSiteHostname +
-    			":" +
-    			gs_encodeSitePath(resolvedSitePath) +
-    			"?$select=id,webUrl,name,displayName";
-    		var siteObject = gs_graphGetJson(siteEndpoint, token);
-    		resolvedSiteId = gs_require("siteId", siteObject.id);
-    	}
-    
-    	return {
-    		siteId: resolvedSiteId,
-    		siteHostname: resolvedSiteHostname,
-    		sitePath: resolvedSitePath
-    	};
-    };
-    
-    var gs_resolveList = function(token, resolvedSiteId, listIdValue, listNameValue) {
-    	var resolvedListId = gs_safeString(listIdValue);
-    	var requestedListName = gs_safeString(listNameValue);
-    	if (gs_isBlank(resolvedListId) && gs_isBlank(requestedListName)) {
-    		throw new java.lang.IllegalArgumentException("Provide listId or listName when resolving drive from list");
-    	}
-    
-    	var listObject = null;
-    	if (!gs_isBlank(resolvedListId)) {
-    		var byIdEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
-    			"/lists/" + gs_encodePathSegment(resolvedListId) +
-    			"?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
-    		listObject = gs_graphGetJson(byIdEndpoint, token);
-    	} else {
-    		var queryEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
-    			"/lists?$select=id,name,displayName,webUrl,list,createdDateTime,lastModifiedDateTime,sharepointIds";
-    		var lookup = gs_odataEscapeString(requestedListName);
-    		queryEndpoint = gs_appendQueryParam(queryEndpoint, "$filter", "displayName eq ''" + lookup + "''");
-    		var queryObject = gs_graphGetJson(queryEndpoint, token);
-    		if (!(queryObject.value instanceof Array) || queryObject.value.length === 0) {
-    			throw new java.lang.RuntimeException("List not found: " + requestedListName);
-    		}
-    		listObject = queryObject.value[0];
-    		resolvedListId = gs_safeString(listObject.id);
-    	}
-    
-    	return {
-    		listId: gs_safeString(resolvedListId),
-    		listName: gs_safeString(listObject.name),
-    		listDisplayName: gs_safeString(listObject.displayName),
-    		listWebUrl: gs_safeString(listObject.webUrl),
-    		listInfo: listObject.list === undefined || listObject.list === null ? {} : listObject.list,
-    		sharepointIds: listObject.sharepointIds === undefined || listObject.sharepointIds === null ? {} : listObject.sharepointIds
-    	};
-    };
-    
-    var gs_findDriveByName = function(token, resolvedSiteId, driveNameValue) {
-    	var endpoint =
-    		"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSiteId) +
-    		"/drives?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
-    	var drivesResponse = gs_graphGetJson(endpoint, token);
-    	if (!(drivesResponse.value instanceof Array) || drivesResponse.value.length === 0) {
-    		throw new java.lang.RuntimeException("No drive found for site: " + resolvedSiteId);
-    	}
-    
-    	var wantedName = gs_safeString(driveNameValue).toLowerCase();
-    	var i;
-    	for (i = 0; i < drivesResponse.value.length; i++) {
-    		if (gs_safeString(drivesResponse.value[i].name).toLowerCase() === wantedName) {
-    			return gs_normalizeDrive(drivesResponse.value[i]);
-    		}
-    	}
-    	throw new java.lang.RuntimeException("Drive not found: " + driveNameValue);
-    };
+    'include("js/sharepoint_provider.js");
+    include("js/sharepoint_graph_common.js");
     
     var graphOperation = "resolve_drive";
     var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All|Files.Read.All|Files.ReadWrite.All";
     var tokenMode = "delegated_or_application";
     response = null;
+    var requestedProvider = sppr_normalizeProvider(provider, "graph");
     
-    try {
+    if (requestedProvider === "onprem") {
+    	tokenMode = "onprem";
+    	try {
+    		sppr_ensureOnPremDispatch();
+    
+    		var onPremCallSequence = function(sequenceName, parametersJS) {
+    			var HashMap = java.util.HashMap;
+    			var InternalRequester = Packages.com.twinsoft.convertigo.engine.requesters.InternalRequester;
+    			var parameters = new HashMap();
+    			var projectArray = java.lang.reflect.Array.newInstance(java.lang.String, 1);
+    			projectArray[0] = spop_currentProjectName();
+    			parameters.put("__project", projectArray);
+    			parameters.put("__sequence", sequenceName);
+    			parameters.put("__context", "syncContext_" + java.lang.System.currentTimeMillis());
+    			var keys = Object.keys(parametersJS);
+    			var i;
+    			for (i = 0; i < keys.length; i++) {
+    				var key = keys[i];
+    				if (parametersJS[key] !== null && parametersJS[key] !== undefined) {
+    					parameters.put(key, parametersJS[key]);
+    				}
+    			}
+    			var requester = new InternalRequester(parameters, context.httpServletRequest);
+    			try {
+    				var innerResponse = requester.processRequest();
+    				var converted = JSON.parse(String(Packages.com.twinsoft.convertigo.engine.util.XMLUtils.XmlToJson(innerResponse.getDocumentElement(), true, true, Packages.com.twinsoft.convertigo.engine.enums.JsonOutput.JsonRoot.docNode)));
+    				org.apache.log4j.MDC.put("ContextualParameters", context.logParameters);
+    				return gs_safeObject(gs_safeObject(converted.document).response);
+    			} finally {
+    				try {
+    					var innerContext = requester.getContext();
+    					theApp.contextManager.remove(innerContext);
+    				} catch (ignoreInnerContext) {
+    				}
+    			}
+    		};
+    
+    		var onPremEffectiveDriveId = gs_safeString(driveId);
+    		if (gs_isBlank(onPremEffectiveDriveId)) {
+    			onPremEffectiveDriveId = gs_safeString(listId);
+    		}
+    		var onPremEffectiveDriveName = gs_safeString(driveName);
+    		if (gs_isBlank(onPremEffectiveDriveName)) {
+    			onPremEffectiveDriveName = gs_safeString(listName);
+    		}
+    		if (gs_isBlank(onPremEffectiveDriveId) && gs_isBlank(onPremEffectiveDriveName)) {
+    			throw new java.lang.IllegalArgumentException("Provide driveId, driveName, listId or listName");
+    		}
+    
+    		var onPremDrivesResponse = onPremCallSequence("ListSiteDrives", {
+    			provider: "onprem",
+    			siteBaseUrl: siteBaseUrl,
+    			siteHostname: siteHostname,
+    			sitePath: sitePath,
+    			onPremProtocol: onPremProtocol,
+    			top: "5000",
+    			maxPages: "20",
+    			orderBy: "",
+    			filter: "",
+    			search: onPremEffectiveDriveName,
+    			selectFields: "",
+    			includeRawDrive: "false",
+    			accessToken: accessToken,
+    			onPremUsername: onPremUsername,
+    			onPremPassword: onPremPassword,
+    			cookieHeader: cookieHeader
+    		});
+    		if (onPremDrivesResponse === null || onPremDrivesResponse === undefined) {
+    			throw new java.lang.RuntimeException("list_site_drives returned no response");
+    		}
+    		if (onPremDrivesResponse.ok !== true) {
+    			throw new java.lang.RuntimeException("list_site_drives failed: " + gs_safeString(onPremDrivesResponse.errorMessage));
+    		}
+    		var onPremDrives = gs_safeObject(onPremDrivesResponse.data);
+    		var onPremDriveItems = onPremDrives.items;
+    		if (onPremDriveItems === null || onPremDriveItems === undefined) {
+    			onPremDriveItems = [];
+    		}
+    		var onPremDrive = null;
+    		var onPremIndex;
+    		for (onPremIndex = 0; onPremIndex < onPremDriveItems.length; onPremIndex++) {
+    			var onPremCandidate = gs_safeObject(onPremDriveItems[onPremIndex]);
+    			if (!gs_isBlank(onPremEffectiveDriveId) && gs_safeString(onPremCandidate.driveId) === onPremEffectiveDriveId) {
+    				onPremDrive = onPremCandidate;
+    				break;
+    			}
+    			if (!gs_isBlank(onPremEffectiveDriveName) && gs_safeString(onPremCandidate.driveName).toLowerCase() === onPremEffectiveDriveName.toLowerCase()) {
+    				onPremDrive = onPremCandidate;
+    				if (gs_isBlank(onPremEffectiveDriveId)) {
+    					break;
+    				}
+    			}
+    		}
+    		if (onPremDrive === null) {
+    			throw new java.lang.IllegalArgumentException("Unable to resolve on-prem library from provided drive/list identifier");
+    		}
+    
+    		var onPremListInfo = gs_safeObject(onPremDrive.library);
+    		var onPremSharepointIds = gs_safeObject(onPremDrive.sharepointIds);
+    
+    		response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    			siteId: gs_safeString(onPremDrives.siteId),
+    			siteHostname: gs_safeString(onPremDrives.siteHostname),
+    			sitePath: gs_safeString(onPremDrives.sitePath),
+    			driveId: gs_safeString(onPremDrive.driveId),
+    			driveName: gs_safeString(onPremDrive.driveName),
+    			driveWebUrl: gs_safeString(onPremDrive.driveWebUrl),
+    			driveType: gs_isBlank(onPremDrive.driveType) ? "documentLibrary" : gs_safeString(onPremDrive.driveType),
+    			createdDateTime: gs_safeString(onPremDrive.createdDateTime),
+    			lastModifiedDateTime: gs_safeString(onPremDrive.lastModifiedDateTime),
+    			sharepointIds: gs_safeObject(onPremDrive.sharepointIds),
+    			quota: gs_safeObject(onPremDrive.quota),
+    			owner: gs_safeObject(onPremDrive.owner),
+    			resolvedFromList: true,
+    			listId: gs_safeString(onPremDrive.driveId),
+    			listName: gs_safeString(onPremDrive.driveName),
+    			listDisplayName: gs_safeString(onPremDrive.driveName),
+    			listWebUrl: gs_safeString(onPremDrive.driveWebUrl),
+    			listInfo: onPremListInfo,
+    			listSharepointIds: {
+    				listId: gs_isBlank(onPremSharepointIds.listId) ? gs_safeString(onPremDrive.driveId) : gs_safeString(onPremSharepointIds.listId),
+    				siteId: gs_isBlank(onPremSharepointIds.siteId) ? gs_safeString(onPremDrives.siteId) : gs_safeString(onPremSharepointIds.siteId)
+    			}
+    		});
+    	} catch (onPremError) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, onPremError);
+    	}
+    } else {
+    	try {
     	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
     	tokenMode = tokenInfo.mode;
     
     	var resolvedSite = gs_resolveSite(tokenInfo.token, siteId, siteHostname, sitePath);
-    	var explicitDriveId = gs_safeString(driveId);
-    	var requestedDriveName = gs_safeString(driveName);
-    	var explicitListId = gs_safeString(listId);
-    	var requestedListName = gs_safeString(listName);
-    
-    	if (gs_isBlank(explicitDriveId) && gs_isBlank(requestedDriveName) && gs_isBlank(explicitListId) && gs_isBlank(requestedListName)) {
-    		throw new java.lang.IllegalArgumentException("Provide driveId, driveName, listId or listName");
-    	}
-    
-    	var resolvedDrive = null;
-    	var resolvedList = null;
-    
-    	if (!gs_isBlank(explicitDriveId)) {
-    		var byIdEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSite.siteId) +
-    			"/drives/" + gs_encodePathSegment(explicitDriveId) +
-    			"?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
-    		resolvedDrive = gs_normalizeDrive(gs_graphGetJson(byIdEndpoint, tokenInfo.token));
-    	} else if (!gs_isBlank(explicitListId) || !gs_isBlank(requestedListName)) {
-    		resolvedList = gs_resolveList(tokenInfo.token, resolvedSite.siteId, explicitListId, requestedListName);
-    		var byListEndpoint =
-    			"https://graph.microsoft.com/v1.0/sites/" + gs_encodePathSegment(resolvedSite.siteId) +
-    			"/lists/" + gs_encodePathSegment(resolvedList.listId) +
-    			"/drive?$select=id,name,webUrl,driveType,createdDateTime,lastModifiedDateTime,sharepointIds,quota,owner";
-    		resolvedDrive = gs_normalizeDrive(gs_graphGetJson(byListEndpoint, tokenInfo.token));
-    	} else {
-    		resolvedDrive = gs_findDriveByName(tokenInfo.token, resolvedSite.siteId, requestedDriveName);
-    	}
+    	var resolvedDriveData = gs_resolveDrive(tokenInfo.token, resolvedSite, driveId, driveName, listId, listName);
+    	var resolvedDrive = resolvedDriveData.drive;
+    	var resolvedList = resolvedDriveData.list;
     
     	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
     		siteId: resolvedSite.siteId,
@@ -377,8 +174,9 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
     		listSharepointIds: resolvedList === null ? {} : resolvedList.sharepointIds,
     		tokenPreview: tokenInfo.token.length > 20 ? tokenInfo.token.substring(0, 20) + "..." : tokenInfo.token
     	});
-    } catch (e) {
-    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    	} catch (e) {
+    		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    	}
     }'
 ↓response [steps.JsonToXmlStep-1772719793329]: 
   comment: Converts the JS response object into XML output.
@@ -419,6 +217,38 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
   comment: List display name or internal name used to resolve the associated drive.
   description: SharePoint list name
   value: ${lib_Microsoft_Sharepoint.onPrem.listName=TestList}
+↓provider [variables.RequestableVariable-1773062151373]: 
+  comment: Backend provider selection graph or onprem.
+  description: Provider selection graph or onprem
+  value: ${lib_Microsoft_Sharepoint.provider}
+↓siteBaseUrl [variables.RequestableVariable-1773062797233]: 
+  comment: Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
+  description: On-prem site base URL
+  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}
+↓onPremProtocol [variables.RequestableVariable-1773062797350]: 
+  comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
+  description: On-prem protocol fallback
+  value: ${lib_Microsoft_Sharepoint.onPrem.protocol}
+↓onPremUsername [variables.RequestableVariable-1773062797417]: 
+  comment: Optional technical username for on-prem basic authentication.
+  description: On-prem technical username
+  value: ${lib_Microsoft_Sharepoint.onPrem.username}
+↓onPremPassword [variables.RequestableVariable-1773062797482]: 
+  comment: Optional technical password for on-prem basic authentication.
+  description: On-prem technical password
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: x047adaa9fc7ed27aec6bc11e4a6b6d7cc0466d133c1a11849961023abeb405245a4fafc73fbab6b6999c294cb356940c0e6fa2827adf0d777f2f4f3e526ac991
+  visibility: '-1'
+↓cookieHeader [variables.RequestableVariable-1773062797539]: 
+  comment: Optional Cookie header for on-prem forms authentication.
+  description: Optional on-prem Cookie header
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xd8e180806a1c1d83a6255212121ab827
+  visibility: '-1'
 ↓accessToken [variables.RequestableVariable-1772719793854]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
@@ -445,3 +275,14 @@ comment: Resolves a SharePoint Online drive by site and drive identifiers using 
     value: /sites/test1
   ↓driveName [variables.TestCaseVariable-1772719795315]: 
     value: Documents
+  ↓provider [variables.TestCaseVariable-1773062799209]: 
+    value: graph
+↓TC_ResolveDrive_OnPrem [core.TestCase]: 
+  ↓siteHostname [variables.TestCaseVariable-1773062799480]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
+  ↓sitePath [variables.TestCaseVariable-1773062799515]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.sitePath=/sites/test}
+  ↓driveName [variables.TestCaseVariable-1773062799556]: 
+    value: ${lib_Microsoft_Sharepoint.onPrem.driveName=TestLibrary}
+  ↓provider [variables.TestCaseVariable-1773062799604]: 
+    value: onprem

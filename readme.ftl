@@ -220,7 +220,7 @@ These symbols are optional and used by routed sequences (`provider=onprem`) when
 <table>
 <tr><th>Symbol</th><th>Required</th><th>Secret</th><th>Purpose</th></tr>
 <tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}</#noparse></code></td><td>Recommended</td><td>No</td><td>Base URL of on-prem site (example: <code>https://sharepoint.local/sites/intranet</code>).</td></tr>
-<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.protocol}</#noparse></code></td><td>Optional</td><td>No</td><td>Fallback protocol used by routed sequences when only host/path are provided (default <code>https</code>).</td></tr>
+<tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.protocol}</#noparse></code></td><td>Optional</td><td>No</td><td>Fallback protocol used by routed sequences when only host/path are provided. If empty, runtime first reuses the connector scheme, then falls back to <code>https</code>.</td></tr>
 <tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.sitePath}</#noparse></code></td><td>Optional</td><td>No</td><td>Default on-prem site path fallback used by routed sequences when <code>sitePath</code> is not passed (example: <code>/sites/test</code>).</td></tr>
 <tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.listName}</#noparse></code></td><td>Optional</td><td>No</td><td>Default on-prem list name fallback used by routed sequences when <code>listName</code> is not passed (example: <code>TestList</code>).</td></tr>
 <tr><td><code><#noparse>${lib_Microsoft_Sharepoint.onPrem.driveName}</#noparse></code></td><td>Optional</td><td>No</td><td>Default on-prem library/drive name fallback used by routed sequences when <code>driveName</code> is not passed (example: <code>TestLibrary</code>).</td></tr>
@@ -239,6 +239,8 @@ These symbols are optional and used by routed sequences (`provider=onprem`) when
 </table>
 Connector `sharepointOnPremHttp` uses shared credentials symbols `onPrem.username` and `onPrem.password.secret`.
 For Claims/NTLM farms, set `onPrem.http.authenticationType=NTLM` and `onPrem.http.ntlmDomain` with those same shared credentials symbols.
+NTLM username can be provided either as a bare user (`Administrator`) plus `onPrem.http.ntlmDomain=LAB`, or as a qualified identity (`LAB\\Administrator`).
+If the username already contains a domain, runtime can split it for the HttpClient NTLM path and still preserve the qualified value for connector-driven NTLM calls.
 When `onPrem.http.authenticationType` is `NTLM` (or `Basic`/`BasicPreemptive`), routed on-prem helper calls delegate authentication to the connector and do not force a sequence-level `Authorization: Basic` header.
 
 	<@header toc=toc anchors=anchors heading="##" text="Authentication Model" />
@@ -257,9 +259,69 @@ When `onPrem.http.authenticationType` is `NTLM` (or `Basic`/`BasicPreemptive`), 
 - Site/list resolvers: `ResolveSite`, `ResolveList`, `ResolveLibrary` with `provider=onprem`.
 - On-prem discovery lists: `ListSiteLists`, `ListSiteDrives` with `provider=onprem`.
 - List CRUD: `ListGetItems`, `GetListItem`, `CreateListItem`, `UpdateListItem`, `DeleteListItem` with `provider=onprem`.
-- File/folder APIs: `ListItems`, `UploadItemContent`, `DownloadItemContent`, `DeleteItem`, `ListItemVersions`, `RestoreItemVersion`, `MoveItem`, `CopyItem`, `CreateFolder` with `provider=onprem`.
-- Share block (`CreateShareLink`, `InviteItemRecipients`, `ListItemPermissions`, `DeleteItemPermission`) stays routed but returns explicit `not_supported_onprem` fallback in on-prem mode.
-- Not covered in on-prem mode: Graph batch, Graph subscriptions.
+- File/folder APIs: `GetItem`, `ListItems`, `CreateFolder`, `UploadItemContent`, `UploadItemLargeContent`, `DownloadItemContent`, `UpdateItem`, `MoveItem`, `CopyItem`, `DeleteItem` with `provider=onprem`.
+- Delta and versions: `ListGetItemsDelta`, `ListItemsDelta`, `ListItemVersions`, `RestoreItemVersion`, `GetCopyItemOperation` with `provider=onprem`.
+- Share block (`CreateShareLink`, `InviteItemRecipients`, `ListItemPermissions`, `DeleteItemPermission`) stays routed but returns explicit `onprem_not_supported` fallback in on-prem mode; callers get a stable payload, not a native permission mutation.
+- Graph-only operations in on-prem runs: `GetGraphAccessToken`, `ExecuteGraphBatch`, `CreateGraphSubscription`, `DeleteGraphSubscription`.
+
+	<@header toc=toc anchors=anchors heading="##" text="Validated Status" />
+Current validated state from the local logical plan reports:
+
+<table>
+<tr><th>Mode</th><th>Report</th><th>Result</th><th>Notes</th></tr>
+<tr><td>Graph</td><td><code>build/logical-test-plan-report-graph-refactor4.json</code></td><td><code>34 total / 30 passed / 0 failed / 4 skipped / 0 mandatory failed</code></td><td>Skipped in this run: <code>GetCopyItemOperation</code>, <code>RestoreItemVersion</code>, <code>CreateGraphSubscription</code>, <code>DeleteGraphSubscription</code>.</td></tr>
+<tr><td>On-Prem</td><td><code>build/logical-test-plan-report-onprem-refactor4.json</code></td><td><code>34 total / 30 passed / 0 failed / 4 skipped / 0 mandatory failed</code></td><td>Skipped in this run: <code>GetGraphAccessToken</code>, <code>ExecuteGraphBatch</code>, <code>CreateGraphSubscription</code>, <code>DeleteGraphSubscription</code>.</td></tr>
+</table>
+
+Operationally, this means:
+- Graph mode is validated on the current test plan.
+- On-prem mode is validated for site/list/library resolution, list CRUD, drive read/write, delta, versions, restore, and copy monitoring.
+- On-prem share/permission endpoints keep a routed contract but intentionally return `onprem_not_supported`.
+
+	<@header toc=toc anchors=anchors heading="##" text="Support Matrix" />
+Legend:
+- `Native`: implemented for the mode.
+- `Fallback`: routed sequence stays callable but returns an explicit fallback payload instead of executing a native backend operation.
+- `Out of scope`: not available in that mode.
+- `Local`: tooling/helper sequence, not a SharePoint runtime backend operation.
+
+<table>
+<tr><th>Sequence</th><th>Graph</th><th>On-Prem</th><th>Notes</th></tr>
+<tr><td><code>BuildGraphFlatJar</code></td><td><code>Local</code></td><td><code>Out of scope</code></td><td>Build helper for the Graph Java SDK jar.</td></tr>
+<tr><td><code>CopyItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Asynchronous copy; monitor is exposed by <code>GetCopyItemOperation</code>.</td></tr>
+<tr><td><code>CreateFolder</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Creates a folder in the target drive/library.</td></tr>
+<tr><td><code>CreateGraphSubscription</code></td><td><code>Native</code></td><td><code>Out of scope</code></td><td>Graph-only webhook subscription API.</td></tr>
+<tr><td><code>CreateListItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List item create path is available in both modes.</td></tr>
+<tr><td><code>CreateShareLink</code></td><td><code>Native</code></td><td><code>Fallback</code></td><td>On-prem returns explicit <code>onprem_not_supported</code>.</td></tr>
+<tr><td><code>DeleteGraphSubscription</code></td><td><code>Native</code></td><td><code>Out of scope</code></td><td>Graph-only webhook subscription API.</td></tr>
+<tr><td><code>DeleteItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>File/folder deletion is supported in both modes.</td></tr>
+<tr><td><code>DeleteItemPermission</code></td><td><code>Native</code></td><td><code>Fallback</code></td><td>On-prem returns explicit <code>onprem_not_supported</code>.</td></tr>
+<tr><td><code>DeleteListItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List item delete path is available in both modes.</td></tr>
+<tr><td><code>DownloadItemContent</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Binary download path is available in both modes.</td></tr>
+<tr><td><code>ExecuteGraphBatch</code></td><td><code>Native</code></td><td><code>Out of scope</code></td><td>Graph-only batch endpoint.</td></tr>
+<tr><td><code>GetCopyItemOperation</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Graph and on-prem expose copy monitoring.</td></tr>
+<tr><td><code>GetGraphAccessToken</code></td><td><code>Native</code></td><td><code>Out of scope</code></td><td>Graph token helper; no on-prem equivalent.</td></tr>
+<tr><td><code>GetItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Drive item resolution/read is available in both modes.</td></tr>
+<tr><td><code>GetListItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List item read path is available in both modes.</td></tr>
+<tr><td><code>InviteItemRecipients</code></td><td><code>Native</code></td><td><code>Fallback</code></td><td>On-prem returns explicit <code>onprem_not_supported</code>.</td></tr>
+<tr><td><code>ListGetItems</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List item enumeration is available in both modes.</td></tr>
+<tr><td><code>ListGetItemsDelta</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Incremental list changes are available in both modes.</td></tr>
+<tr><td><code>ListItemPermissions</code></td><td><code>Native</code></td><td><code>Fallback</code></td><td>On-prem returns explicit <code>onprem_not_supported</code>.</td></tr>
+<tr><td><code>ListItemVersions</code></td><td><code>Native</code></td><td><code>Native</code></td><td>File version listing is available in both modes.</td></tr>
+<tr><td><code>ListItems</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Drive/library children listing is available in both modes.</td></tr>
+<tr><td><code>ListItemsDelta</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Incremental drive changes are available in both modes.</td></tr>
+<tr><td><code>ListSiteDrives</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Drive/library discovery is available in both modes.</td></tr>
+<tr><td><code>ListSiteLists</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List discovery is available in both modes.</td></tr>
+<tr><td><code>MoveItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Move/rename path is available in both modes.</td></tr>
+<tr><td><code>ResolveLibrary</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Library/drive resolver is available in both modes.</td></tr>
+<tr><td><code>ResolveList</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List resolver is available in both modes.</td></tr>
+<tr><td><code>ResolveSite</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Site resolver is available in both modes.</td></tr>
+<tr><td><code>RestoreItemVersion</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Version restore is available in both modes.</td></tr>
+<tr><td><code>UpdateItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Drive item update path is available in both modes.</td></tr>
+<tr><td><code>UpdateListItem</code></td><td><code>Native</code></td><td><code>Native</code></td><td>List item update path is available in both modes.</td></tr>
+<tr><td><code>UploadItemContent</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Small/regular uploads are available in both modes.</td></tr>
+<tr><td><code>UploadItemLargeContent</code></td><td><code>Native</code></td><td><code>Native</code></td><td>Large uploads are available in both modes.</td></tr>
+</table>
 
 	<@header toc=toc anchors=anchors heading="##" text="Endpoint-Only Test Calls" />
 Minimal example with testcase injection:
@@ -290,6 +352,7 @@ python3 ./scripts/run_testcases.py
 Useful overrides:
 - `C8O_BASE_URL` to target another Convertigo endpoint.
 - `C8O_PROJECT` to target another project name.
+- `TEST_PROVIDER=graph` or `TEST_PROVIDER=onprem` to force the backend under test.
 - `SITE_HOSTNAME`, `SITE_PATH`, `LIST_NAME`, `DRIVE_NAME` to target another SharePoint site context.
 - `ACCESS_TOKEN` (delegated mode) or `AZ_TENANT_ID` + `AZ_CLIENT_ID` + `AZ_CLIENT_SECRET` (application override).
 - `RUN_SHARE_OPERATIONS=false` to skip share/invite/permission deletion calls.

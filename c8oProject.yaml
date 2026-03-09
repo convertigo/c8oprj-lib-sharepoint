@@ -7,8 +7,7 @@
   contextTimeout: 59
   corsOrigin: =Origin
   httpSessionTimeout: 60
-  version: 8.0.0.1
-  ↓sharepointOnPremHttp [connectors.HttpConnector]: 🗏 connectors/sharepointOnPremHttp.yaml
+  version: 8.0.0.2
   ↓void [connectors.SqlConnector]: 🗏 connectors/void.yaml
   ↓BuildGraphFlatJar [sequences.GenericSequence]: 🗏 sequences/BuildGraphFlatJar.yaml
   ↓CopyItem [sequences.GenericSequence]: 🗏 sequences/CopyItem.yaml
