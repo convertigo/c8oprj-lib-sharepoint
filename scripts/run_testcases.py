@@ -742,6 +742,9 @@ def main() -> int:
     def drive_scope() -> Dict[str, Any]:
         payload = site_scope()
         payload["driveId"] = plan.ctx.get("drive_id", "")
+        if not is_onprem_mode:
+            # Neutralize on-prem list defaults when exercising Graph drive endpoints.
+            payload["listName"] = ""
         if resolved_drive_name != "":
             payload["driveName"] = resolved_drive_name
         return payload
