@@ -7,7 +7,7 @@ SharePoint connector for Convertigo (Online + On-Prem).
 Online mode uses Microsoft Graph for site/list/drive operations.
 On-prem mode exposes SharePoint REST APIs for site/list/file operations with digest-based writes.
 
-[![Build, Deploy and Tests](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml/badge.svg?branch=8.0.0.0)](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml)
+[![Build, Deploy and Tests](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml/badge.svg?branch=8.0.1.0)](https://github.com/convertigo/c8oprj-lib-sharepoint/actions/workflows/build-and-release.yml)
 
 For more technical informations : [documentation](./project.md)
 
