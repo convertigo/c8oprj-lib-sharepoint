@@ -1,4 +1,4 @@
-accessibility: Hidden
+accessibility: Private
 authenticatedContextRequired: true
 comment: Resolves a SharePoint list by site and list identifier/name using Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 ↓inputVars [steps.InputVariablesStep-1772620734382]: 
@@ -95,14 +95,15 @@ comment: Resolves a SharePoint list by site and list identifier/name using Micro
 ↓accessToken [variables.RequestableVariable-1772620735132]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
+  visibility: '-1'
 ↓tenantId [variables.RequestableVariable-1772620735264]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
-  value: ${Microsoft_AzGraph.tenantId}
+  value: ${Microsoft_AzGraph.tenantId=}
 ↓clientId [variables.RequestableVariable-1772620735399]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
-  value: ${Microsoft_AzGraph.clientId}
+  value: ${Microsoft_AzGraph.clientId=}
 ↓clientSecret [variables.RequestableVariable-1772620735546]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
@@ -114,19 +115,19 @@ comment: Resolves a SharePoint list by site and list identifier/name using Micro
 ↓provider [variables.RequestableVariable-1772714810716]: 
   comment: Backend provider selection graph or onprem.
   description: Provider selection graph or onprem
-  value: ${lib_Microsoft_Sharepoint.provider}
+  value: ${lib_Microsoft_Sharepoint.provider=graph}
 ↓siteBaseUrl [variables.RequestableVariable-1772714810776]: 
   comment: Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
   description: On-prem site base URL
-  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}
+  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl=}
 ↓onPremProtocol [variables.RequestableVariable-1772714810819]: 
   comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
   description: On-prem protocol fallback
-  value: ${lib_Microsoft_Sharepoint.onPrem.protocol}
+  value: ${lib_Microsoft_Sharepoint.onPrem.protocol=https}
 ↓onPremUsername [variables.RequestableVariable-1772714810874]: 
   comment: Optional technical username for on-prem basic authentication.
   description: On-prem technical username
-  value: ${lib_Microsoft_Sharepoint.onPrem.username}
+  value: ${lib_Microsoft_Sharepoint.onPrem.username=}
 ↓onPremPassword [variables.RequestableVariable-1772714810932]: 
   comment: Optional technical password for on-prem basic authentication.
   description: On-prem technical password

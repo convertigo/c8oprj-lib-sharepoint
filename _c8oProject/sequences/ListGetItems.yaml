@@ -1,4 +1,4 @@
-accessibility: Hidden
+accessibility: Private
 authenticatedContextRequired: true
 comment: Lists SharePoint list items through Microsoft Graph (online) or SharePoint REST (on-prem), with filtering/pagination/projection. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 ↓inputVars [steps.InputVariablesStep-1772620727682]: 
@@ -66,29 +66,33 @@ comment: Lists SharePoint list items through Microsoft Graph (online) or SharePo
     		var shouldExpandFields = gs_toBoolean(expandFields, true);
     		var selectedFields = gs_splitCsv(selectFields);
     
-    		var resolved = gs_resolveSiteAndList(
+    		var resolved = gs_siteAndList(
     			tokenInfo.token,
     			siteId,
     			siteHostname,
     			sitePath,
     			listId,
-    			listName
+    			listName,
+    			gs_toBoolean(describeList, true)
     		);
     
     		var requestInfo = gs_graphSiteListItemsGetRequestInfo(tokenInfo.token, resolved.siteId, resolved.listId);
+    		var expands = [];
     		if (shouldExpandFields) {
-    			var expandValue = "fields";
-    			if (selectedFields.length > 0) {
-    				expandValue = "fields($select=" + selectedFields.join(",") + ")";
-    			}
-    			gs_graphAddQueryParameter(requestInfo, "$expand", expandValue);
+    			expands.push(selectedFields.length > 0 ? "fields($select=" + selectedFields.join(",") + ")" : "fields");
+    		}
+    		if (gs_toBoolean(expandDriveItem, false)) {
+    			expands.push("driveItem($select=id,name,size,file,folder,parentReference,webUrl)");
+    		}
+    		if (expands.length > 0) {
+    			gs_graphAddQueryParameter(requestInfo, "$expand", expands.join(","));
     		}
     		gs_graphAddQueryParameter(requestInfo, "$top", String(pageTop));
     		gs_graphAddQueryParameter(requestInfo, "$orderby", gs_safeString(orderBy));
     		gs_graphAddQueryParameter(requestInfo, "$filter", gs_safeString(filter));
     
     	var items = [];
-    	var nextUrl = gs_requestInfoUrl(requestInfo);
+    	var nextUrl = gs_withSkipToken(gs_requestInfoUrl(requestInfo), skipToken);
     	var pageResult = gs_graphCollectPagedValues(nextUrl, tokenInfo.token, maxPageCount);
     	var pageValues = pageResult.values;
     	var pageCount = pageResult.pagesFetched;
@@ -112,6 +116,7 @@ comment: Lists SharePoint list items through Microsoft Graph (online) or SharePo
     			pagesFetched: pageCount,
     			hasMore: !gs_isBlank(nextUrl),
     			nextLink: gs_safeString(nextUrl),
+    			nextSkipToken: gs_skipTokenOf(nextUrl),
     			query: {
     				top: pageTop,
     				maxPages: maxPageCount,
@@ -126,7 +131,8 @@ comment: Lists SharePoint list items through Microsoft Graph (online) or SharePo
     	} catch (e) {
     		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
     	}
-    }'
+    }
+    json = gs_toBoolean(jsonOutput, false) ? JSON.stringify(response) : null;'
 ↓response [steps.JsonToXmlStep-1772620727818]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
@@ -141,6 +147,10 @@ comment: Lists SharePoint list items through Microsoft Graph (online) or SharePo
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
+↓json [steps.ElementStep-1799700000104]: 
+  comment: The answer as a JSON text, names and types kept exactly, when jsonOutput is true; else empty.
+  expression: json
+  nodeName: json
 ↓siteId [variables.RequestableVariable-1772620727896]: 
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
@@ -185,17 +195,29 @@ comment: Lists SharePoint list items through Microsoft Graph (online) or SharePo
   comment: true includes raw Graph item payload under each result item.
   description: Include raw Graph payload
   value: false
+↓expandDriveItem [variables.RequestableVariable-1799700002001]: 
+  comment: 'true for a document library: each item gives its driveItem (the file or the folder it is: id, name, size, driveId, path), to download a document with DownloadDriveItem.'
+  description: Expand the drive item
+  value: false
+↓skipToken [variables.RequestableVariable-1799700000105]: 
+  comment: 'Optional $skiptoken of the next page (nextSkipToken of a previous answer): the reading goes on from that page. Microsoft Graph only.'
+  description: Next page token
+↓describeList [variables.RequestableVariable-1799700000106]: 
+  comment: 'false with siteId and listId: the list is not read first (its name is not answered), one call to Graph less per page.'
+  description: Read the list first
+  value: true
 ↓accessToken [variables.RequestableVariable-1772620729543]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
+  visibility: '-1'
 ↓tenantId [variables.RequestableVariable-1772620729738]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
-  value: ${Microsoft_AzGraph.tenantId}
+  value: ${Microsoft_AzGraph.tenantId=}
 ↓clientId [variables.RequestableVariable-1772620729955]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
-  value: ${Microsoft_AzGraph.clientId}
+  value: ${Microsoft_AzGraph.clientId=}
 ↓clientSecret [variables.RequestableVariable-1772620730163]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
@@ -204,22 +226,26 @@ comment: Lists SharePoint list items through Microsoft Graph (online) or SharePo
     - ↑traceable: false
     - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
   visibility: '-1'
+↓jsonOutput [variables.RequestableVariable-1799700000107]: 
+  comment: true adds the answer as a JSON text (element json), its names and types kept exactly.
+  description: Answer as a JSON text
+  value: false
 ↓provider [variables.RequestableVariable-1772714812211]: 
   comment: Backend provider selection graph or onprem.
   description: Provider selection graph or onprem
-  value: ${lib_Microsoft_Sharepoint.provider}
+  value: ${lib_Microsoft_Sharepoint.provider=graph}
 ↓siteBaseUrl [variables.RequestableVariable-1772714812247]: 
   comment: Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
   description: On-prem site base URL
-  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}
+  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl=}
 ↓onPremProtocol [variables.RequestableVariable-1772714812287]: 
   comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
   description: On-prem protocol fallback
-  value: ${lib_Microsoft_Sharepoint.onPrem.protocol}
+  value: ${lib_Microsoft_Sharepoint.onPrem.protocol=https}
 ↓onPremUsername [variables.RequestableVariable-1772714812338]: 
   comment: Optional technical username for on-prem basic authentication.
   description: On-prem technical username
-  value: ${lib_Microsoft_Sharepoint.onPrem.username}
+  value: ${lib_Microsoft_Sharepoint.onPrem.username=}
 ↓onPremPassword [variables.RequestableVariable-1772714812393]: 
   comment: Optional technical password for on-prem basic authentication.
   description: On-prem technical password

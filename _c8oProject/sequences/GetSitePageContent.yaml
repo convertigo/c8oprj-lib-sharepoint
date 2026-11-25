@@ -1,0 +1,106 @@
+accessibility: Private
+authenticatedContextRequired: true
+comment: 'Reads a modern page of a SharePoint site (its home page by default) and turns it into sections, columns and blocks (text, image, links, list, news of the site, activity as its default library, divider), each column also given as one clean HTML fragment (a list of tags and attributes kept, no style, script nor event); the images of the site are read by Graph and inlined (data:) under maxImageBytes; the web parts it does not turn (events...) and the empty news are listed in skipped. With sharePointAccessToken (a token of the host of the site), the logo of the site too, by its REST API. (Graph permissions Sites.Read.All|Sites.ReadWrite.All; SharePoint AllSites.Read for the logo)'
+↓inputVars [steps.InputVariablesStep-1799700002120]: 
+  comment: Exposes request inputs in XML for debugging and source mapping.
+↓ExecuteGetSitePageContent [steps.SimpleStep-1799700002121]: 
+  comment: Chooses the page, reads its canvas layout and turns its web parts into blocks.
+  expression: |
+    'include("js/sharepoint_graph_common.js");
+    include("js/sharepoint_page_content.js");
+    
+    var graphOperation = "site_page_content";
+    var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All";
+    var tokenMode = "delegated_or_application";
+    response = null;
+    try {
+    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    	tokenMode = tokenInfo.mode;
+    	var site = gs_isBlank(siteId) ? gs_resolveSite(tokenInfo.token, "", siteHostname, sitePath).siteId : String(siteId);
+    	var limitImages = gs_parseInteger("maxImages", maxImages, GS_PAGE_MAX_IMAGES);
+    	var limitBytes = gs_parseInteger("maxImageBytes", maxImageBytes, GS_PAGE_MAX_IMAGE_BYTES);
+    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, gs_pageContent(tokenInfo.token, site, {
+    		pageId: gs_safeString(pageId),
+    		pageName: gs_safeString(pageName),
+    		embedImages: gs_toBoolean(embedImages, true),
+    		maxImages: limitImages < 0 ? 0 : (limitImages > 50 ? 50 : limitImages),
+    		maxImageBytes: limitBytes < 1 ? GS_PAGE_MAX_IMAGE_BYTES : (limitBytes > 5000000 ? 5000000 : limitBytes),
+    		sharePointToken: gs_safeString(sharePointAccessToken)
+    	}));
+    } catch (e) {
+    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    }
+    json = gs_toBoolean(jsonOutput, false) ? JSON.stringify(response) : null;'
+↓response [steps.JsonToXmlStep-1799700002122]: 
+  comment: Converts the JS response object into XML output.
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: response
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: response
+↓json [steps.ElementStep-1799700002123]: 
+  comment: The answer as a JSON text, names and types kept exactly, when jsonOutput is true; else empty.
+  expression: json
+  nodeName: json
+↓siteId [variables.RequestableVariable-1799700002124]: 
+  comment: Optional site identifier (Graph). If empty, siteHostname and sitePath are used to resolve it.
+  description: Optional Graph site identifier
+↓siteHostname [variables.RequestableVariable-1799700002125]: 
+  comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+  description: SharePoint hostname
+↓sitePath [variables.RequestableVariable-1799700002126]: 
+  comment: Site path when resolving siteId, for example /sites/engineering.
+  description: SharePoint site path
+↓pageId [variables.RequestableVariable-1799700002127]: 
+  comment: Optional page identifier. If empty, pageName is used, else the home page of the site (its layout home, else Home.aspx).
+  description: Optional page identifier
+↓pageName [variables.RequestableVariable-1799700002128]: 
+  comment: Optional page file name, for example Projects.aspx.
+  description: Optional page file name
+↓embedImages [variables.RequestableVariable-1799700002129]: 
+  comment: 'true: the images of the site are read by Graph and inlined (data:image/...;base64); false: they are listed as unavailable.'
+  description: Inline the images
+  value: true
+↓maxImages [variables.RequestableVariable-1799700002130]: 
+  comment: The images read at most (0 to 50); the next ones are listed with the status limit.
+  description: Maximum images
+  value: 20
+↓maxImageBytes [variables.RequestableVariable-1799700002131]: 
+  comment: The size of an image read at most, in bytes (up to 5000000); a larger one has the status too_large.
+  description: Maximum image size
+  value: 1000000
+↓accessToken [variables.RequestableVariable-1799700002132]: 
+  comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+  description: Delegated Microsoft Graph access token
+  visibility: '-1'
+↓sharePointAccessToken [variables.RequestableVariable-1799700002138]: 
+  comment: Optional delegated token of the SharePoint host of the site (AllSites.Read), for its logo only; empty, the logo is not read.
+  description: Delegated SharePoint access token of the site host
+  visibility: '-1'
+↓tenantId [variables.RequestableVariable-1799700002134]: 
+  comment: Azure Entra tenant id used for app-only token acquisition.
+  description: Tenant id for app-only token
+  value: ${Microsoft_AzGraph.tenantId=}
+↓clientId [variables.RequestableVariable-1799700002135]: 
+  comment: Azure Entra application client id used for app-only token acquisition.
+  description: Client id for app-only token
+  value: ${Microsoft_AzGraph.clientId=}
+↓clientSecret [variables.RequestableVariable-1799700002133]: 
+  comment: Azure Entra application client secret used for app-only token acquisition.
+  description: Client secret for app-only token
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+  visibility: '-1'
+↓jsonOutput [variables.RequestableVariable-1799700002136]: 
+  comment: true adds the answer as a JSON text (element json), its names and types kept exactly.
+  description: Answer as a JSON text
+  value: false

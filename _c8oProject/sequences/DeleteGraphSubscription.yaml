@@ -1,4 +1,4 @@
-accessibility: Hidden
+accessibility: Private
 authenticatedContextRequired: true
 comment: Deletes one Microsoft Graph webhook subscription (resource-dependent permissions).
 ↓inputVars [steps.InputVariablesStep-1772711626618]: 
@@ -53,14 +53,15 @@ comment: Deletes one Microsoft Graph webhook subscription (resource-dependent pe
 ↓accessToken [variables.RequestableVariable-1772711626796]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
+  visibility: '-1'
 ↓tenantId [variables.RequestableVariable-1772711626868]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
-  value: ${Microsoft_AzGraph.tenantId}
+  value: ${Microsoft_AzGraph.tenantId=}
 ↓clientId [variables.RequestableVariable-1772711626936]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
-  value: ${Microsoft_AzGraph.clientId}
+  value: ${Microsoft_AzGraph.clientId=}
 ↓clientSecret [variables.RequestableVariable-1772711627015]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token

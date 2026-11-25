@@ -1,4 +1,4 @@
-accessibility: Hidden
+accessibility: Private
 authenticatedContextRequired: true
 comment: Retrieves one SharePoint list item through Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 ↓inputVars [steps.InputVariablesStep-1772620902001]: 
@@ -46,13 +46,14 @@ comment: Retrieves one SharePoint list item through Microsoft Graph (online) or 
     		var includeRaw = gs_toBoolean(includeRawItem, false);
     		var selectedFields = gs_splitCsv(selectFields);
     
-    		var resolved = gs_resolveSiteAndList(
+    		var resolved = gs_siteAndList(
     			tokenInfo.token,
     			siteId,
     			siteHostname,
     			sitePath,
     			listId,
-    			listName
+    			listName,
+    			gs_toBoolean(describeList, true)
     		);
     
     		var requestInfo = gs_graphSiteListItemGetRequestInfo(tokenInfo.token, resolved.siteId, resolved.listId, targetItemId);
@@ -85,7 +86,8 @@ comment: Retrieves one SharePoint list item through Microsoft Graph (online) or 
     	} catch (e) {
     		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
     	}
-    }'
+    }
+    json = gs_toBoolean(jsonOutput, false) ? JSON.stringify(response) : null;'
 ↓response [steps.JsonToXmlStep-1772620902003]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
@@ -100,6 +102,10 @@ comment: Retrieves one SharePoint list item through Microsoft Graph (online) or 
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
+↓json [steps.ElementStep-1799700000108]: 
+  comment: The answer as a JSON text, names and types kept exactly, when jsonOutput is true; else empty.
+  expression: json
+  nodeName: json
 ↓siteId [variables.RequestableVariable-1772620902004]: 
   comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
   description: Optional Graph site identifier
@@ -129,17 +135,22 @@ comment: Retrieves one SharePoint list item through Microsoft Graph (online) or 
   comment: true includes raw Graph item payload under item.raw.
   description: Include raw Graph payload
   value: false
+↓describeList [variables.RequestableVariable-1799700000109]: 
+  comment: 'false with siteId and listId: the list is not read first (its name is not answered), one call to Graph less.'
+  description: Read the list first
+  value: true
 ↓accessToken [variables.RequestableVariable-1772620902012]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
+  visibility: '-1'
 ↓tenantId [variables.RequestableVariable-1772620902013]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
-  value: ${Microsoft_AzGraph.tenantId}
+  value: ${Microsoft_AzGraph.tenantId=}
 ↓clientId [variables.RequestableVariable-1772620902014]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
-  value: ${Microsoft_AzGraph.clientId}
+  value: ${Microsoft_AzGraph.clientId=}
 ↓clientSecret [variables.RequestableVariable-1772620902015]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
@@ -148,22 +159,26 @@ comment: Retrieves one SharePoint list item through Microsoft Graph (online) or 
     - ↑traceable: false
     - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
   visibility: '-1'
+↓jsonOutput [variables.RequestableVariable-1799700000110]: 
+  comment: true adds the answer as a JSON text (element json), its names and types kept exactly.
+  description: Answer as a JSON text
+  value: false
 ↓provider [variables.RequestableVariable-1772714813905]: 
   comment: Backend provider selection graph or onprem.
   description: Provider selection graph or onprem
-  value: ${lib_Microsoft_Sharepoint.provider}
+  value: ${lib_Microsoft_Sharepoint.provider=graph}
 ↓siteBaseUrl [variables.RequestableVariable-1772714813944]: 
   comment: Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
   description: On-prem site base URL
-  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}
+  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl=}
 ↓onPremProtocol [variables.RequestableVariable-1772714813986]: 
   comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
   description: On-prem protocol fallback
-  value: ${lib_Microsoft_Sharepoint.onPrem.protocol}
+  value: ${lib_Microsoft_Sharepoint.onPrem.protocol=https}
 ↓onPremUsername [variables.RequestableVariable-1772714814037]: 
   comment: Optional technical username for on-prem basic authentication.
   description: On-prem technical username
-  value: ${lib_Microsoft_Sharepoint.onPrem.username}
+  value: ${lib_Microsoft_Sharepoint.onPrem.username=}
 ↓onPremPassword [variables.RequestableVariable-1772714814098]: 
   comment: Optional technical password for on-prem basic authentication.
   description: On-prem technical password

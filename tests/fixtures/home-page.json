@@ -1,0 +1,51 @@
+{
+  "id": "p-home",
+  "name": "Home.aspx",
+  "title": "Home",
+  "pageLayout": "home",
+  "webUrl": "https://contoso.sharepoint.com/sites/Team/SitePages/Home.aspx",
+  "canvasLayout": {
+    "horizontalSections": [
+      {
+        "layout": "oneThirdRightColumn",
+        "id": "1",
+        "emphasis": "none",
+        "columns": [
+          {
+            "id": "1",
+            "width": 8,
+            "webparts": [
+              { "@odata.type": "#microsoft.graph.standardWebPart", "id": "w1", "webPartType": "8c88f208-6c77-4bdb-86a0-0c47b4316588",
+                "data": { "title": "Actualités", "properties": {}, "serverProcessedContent": { "htmlStrings": [], "searchablePlainTexts": [], "imageSources": [], "links": [] } } },
+              { "@odata.type": "#microsoft.graph.standardWebPart", "id": "w2", "webPartType": "eb95c819-ab8f-4689-bd03-0c2d65d47b1f",
+                "data": { "title": "Activité du site", "properties": {}, "serverProcessedContent": { "htmlStrings": [], "searchablePlainTexts": [], "imageSources": [], "links": [] } } }
+            ]
+          },
+          {
+            "id": "2",
+            "width": 4,
+            "webparts": [
+              { "@odata.type": "#microsoft.graph.standardWebPart", "id": "w3", "webPartType": "c70391ea-0b10-4ee9-b2b4-006d3fcad0cd",
+                "data": { "title": "Liens rapides", "properties": { "layoutId": "List", "titleHTML": "<h2><span>Liens rapides</span></h2>",
+                    "items": [ { "sourceItem": { "itemType": 2 }, "thumbnailType": 3, "id": 3 }, { "sourceItem": { "itemType": 2 }, "thumbnailType": 3, "id": 1 } ] },
+                  "serverProcessedContent": { "htmlStrings": [],
+                    "searchablePlainTexts": [ { "key": "title", "value": "Liens rapides" }, { "key": "items[0].title", "value": "contoso.sharepoint.com" }, { "key": "items[1].title", "value": "En savoir plus sur un site d’équipe" } ],
+                    "imageSources": [],
+                    "links": [ { "key": "baseUrl", "value": "/sites/Team" }, { "key": "items[0].sourceItem.url", "value": "/sites/Team/Lists/Clients/AllItems.aspx" },
+                      { "key": "items[1].sourceItem.url", "value": "https://go.microsoft.com/fwlink/p/?linkid=827918" } ] } } },
+              { "@odata.type": "#microsoft.graph.standardWebPart", "id": "w4", "webPartType": "f92bf067-bc19-489e-a556-7fe95f508720",
+                "data": { "title": "Bibliothèque de documents", "properties": { "isDocumentLibrary": true, "showDefaultDocumentLibrary": true, "webpartHeightKey": 4, "selectedListUrl": "" },
+                  "serverProcessedContent": { "htmlStrings": [], "searchablePlainTexts": [], "imageSources": [], "links": [] } } },
+              { "@odata.type": "#microsoft.graph.textWebPart", "id": "w5",
+                "innerHtml": "<p>Contacts de l'équipe projet&nbsp;: écrivez à projets@contoso.example pour toute demande.</p>" },
+              { "@odata.type": "#microsoft.graph.standardWebPart", "id": "w6", "webPartType": "d1d91016-032f-456d-98a4-721247c305e8",
+                "data": { "title": "Image", "properties": { "imageSourceType": 2, "captionText": "", "altText": "", "linkUrl": "", "fileName": "devis-initech_1794314428468.png" },
+                  "serverProcessedContent": { "htmlStrings": [], "searchablePlainTexts": [], "links": [],
+                    "imageSources": [ { "key": "imageSource", "value": "/sites/Team/SiteAssets/SitePages/Home/copy-%281%29-devis%20initech-232067.png" } ] } } }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -21,6 +21,9 @@ function gs_require(name, value) {
 
 function gs_errorClass(error) {
   try {
+    if (error && typeof error.errorClass === "string") {
+      return error.errorClass;
+    }
     if (error && error.javaException) {
       return String(error.javaException.getClass().getName());
     }
@@ -44,6 +47,7 @@ function gs_responseOk(graphOperation, tokenMode, requiredPermission, data) {
 }
 
 function gs_responseError(graphOperation, tokenMode, requiredPermission, error) {
+  var http = gs_httpStatusOf(error);
   var message = "";
   try {
     message = String(error.message);
@@ -57,8 +61,50 @@ function gs_responseError(graphOperation, tokenMode, requiredPermission, error) 
     tokenMode: tokenMode,
     requiredPermission: requiredPermission,
     errorClass: gs_errorClass(error),
-    errorMessage: message
+    errorMessage: message,
+    httpStatus: http.status,
+    retryAfter: http.retryAfter
   };
+}
+
+// The error of an HTTP answer that is not a success: the message as before, its status and its Retry-After kept for
+// gs_responseError (httpStatus, retryAfter), so a caller can wait when Graph throttles (429, 503) or sign in again (401).
+function gs_httpFailure(label, result) {
+  var error = new Error(label + " (" + result.statusCode + "): " + gs_safeString(result.body));
+  error.errorClass = "java.lang.RuntimeException";
+  error.httpStatus = Number(result.statusCode);
+  error.retryAfter = gs_safeString(result.retryAfter);
+  return error;
+}
+
+// The HTTP status and the Retry-After of an error: one of gs_httpFailure, or an ApiException of the Graph SDK.
+// {status: null, retryAfter: ""} for an error that is not an HTTP answer (no network, a wrong input...).
+function gs_httpStatusOf(error) {
+  var found = { status: null, retryAfter: "" };
+  try {
+    if (error && error.httpStatus !== undefined && error.httpStatus !== null) {
+      found.status = Number(error.httpStatus);
+      found.retryAfter = gs_safeString(error.retryAfter);
+      return found;
+    }
+    var javaError = error && error.javaException ? error.javaException : null;
+    if (javaError !== null && javaError instanceof Packages.com.microsoft.kiota.ApiException) {
+      found.status = Number(javaError.getResponseStatusCode());
+      var headers = javaError.getResponseHeaders();
+      if (headers !== null) {
+        var names = headers.keySet().iterator();
+        while (names.hasNext()) {
+          var name = names.next();
+          var values = headers.get(name);
+          if (String(name).toLowerCase() === "retry-after" && values !== null && !values.isEmpty()) {
+            found.retryAfter = String(values.iterator().next());
+          }
+        }
+      }
+    }
+  } catch (ignoreStatus) {
+  }
+  return found;
 }
 
 function gs_readAll(inputStream) {
@@ -128,12 +174,73 @@ function gs_getGraphHttpClient() {
   var OkHttpClient = Packages.okhttp3.OkHttpClient;
   var TimeUnit = java.util.concurrent.TimeUnit;
   gs_graphHttpClient = new OkHttpClient.Builder()
+    .proxySelector(gs_engineProxySelector())
+    .proxyAuthenticator(gs_engineProxyAuthenticator())
+    .followRedirects(true)
+    .followSslRedirects(false)
     .connectTimeout(30, TimeUnit.SECONDS)
     .readTimeout(180, TimeUnit.SECONDS)
     .writeTimeout(180, TimeUnit.SECONDS)
     .callTimeout(300, TimeUnit.SECONDS)
     .build();
   return gs_graphHttpClient;
+}
+
+// The proxy the settings of the engine give for an URI (manual or automatic, its domains without proxy), null for none, so
+// Graph is reached as the other connections of the engine. Its user and password only for a basic authentication.
+function gs_engineProxy(uri) {
+  try {
+    var manager = com.twinsoft.convertigo.engine.Engine.theApp.proxyManager;
+    if (manager === null || !manager.isEnabled()) {
+      return null;
+    }
+    var hostConfiguration = new org.apache.commons.httpclient.HostConfiguration();
+    var state = new org.apache.commons.httpclient.HttpState();
+    manager.setProxy(hostConfiguration, state, uri.toURL());
+    var host = gs_safeString(hostConfiguration.getProxyHost());
+    if (gs_isBlank(host)) {
+      return null;
+    }
+    var proxy = { host: host, port: hostConfiguration.getProxyPort(), user: "", password: "" };
+    var credentials = state.getProxyCredentials(org.apache.commons.httpclient.auth.AuthScope.ANY);
+    if (credentials !== null && String(manager.proxyMethod) === "basic" &&
+        credentials instanceof org.apache.commons.httpclient.UsernamePasswordCredentials) {
+      proxy.user = gs_safeString(credentials.getUserName());
+      proxy.password = gs_safeString(credentials.getPassword());
+    }
+    return proxy;
+  } catch (ignoreProxy) {
+    return null;
+  }
+}
+
+function gs_engineProxySelector() {
+  return new JavaAdapter(java.net.ProxySelector, {
+    select: function(uri) {
+      var proxy = gs_engineProxy(uri);
+      return java.util.Collections.singletonList(proxy === null ? java.net.Proxy.NO_PROXY :
+        new java.net.Proxy(java.net.Proxy.Type.HTTP, java.net.InetSocketAddress.createUnresolved(proxy.host, proxy.port)));
+    },
+    connectFailed: function(uri, address, failure) {
+    }
+  });
+}
+
+function gs_engineProxyAuthenticator() {
+  return new JavaAdapter(Packages.okhttp3.Authenticator, {
+    authenticate: function(route, response) {
+      if (route === null || response.request().header("Proxy-Authorization") !== null) {
+        return null;
+      }
+      var proxy = gs_engineProxy(route.address().url().uri());
+      if (proxy === null || gs_isBlank(proxy.user)) {
+        return null;
+      }
+      return response.request().newBuilder()
+        .header("Proxy-Authorization", Packages.okhttp3.Credentials.basic(proxy.user, proxy.password))
+        .build();
+    }
+  });
 }
 
 function gs_newAuthenticationProvider(token) {
@@ -324,7 +431,7 @@ function gs_httpRequestBytes(method, endpoint, bearerToken, accept, headers) {
 function gs_graphGetJson(endpoint, token, headers) {
   var result = gs_httpRequest("GET", endpoint, token, null, "", "application/json", headers);
   if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
+    throw gs_httpFailure("Graph request failed", result);
   }
   if (gs_isBlank(result.body)) {
     return {};
@@ -336,7 +443,7 @@ function gs_graphPostJson(endpoint, token, payloadObject, headers) {
   var payload = payloadObject === null || payloadObject === undefined ? "{}" : JSON.stringify(payloadObject);
   var result = gs_httpRequest("POST", endpoint, token, payload, "application/json", "application/json", headers);
   if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
+    throw gs_httpFailure("Graph request failed", result);
   }
   if (gs_isBlank(result.body)) {
     return {};
@@ -348,7 +455,7 @@ function gs_graphPatchJson(endpoint, token, payloadObject, headers) {
   var payload = payloadObject === null || payloadObject === undefined ? "{}" : JSON.stringify(payloadObject);
   var result = gs_httpRequest("PATCH", endpoint, token, payload, "application/json", "application/json", headers);
   if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw new java.lang.RuntimeException("Graph patch failed (" + result.statusCode + "): " + result.body);
+    throw gs_httpFailure("Graph patch failed", result);
   }
   if (gs_isBlank(result.body)) {
     return {};
@@ -359,7 +466,7 @@ function gs_graphPatchJson(endpoint, token, payloadObject, headers) {
 function gs_graphDelete(endpoint, token, headers) {
   var result = gs_httpRequest("DELETE", endpoint, token, null, "", "application/json", headers);
   if (result.statusCode !== 404 && (result.statusCode < 200 || result.statusCode >= 300)) {
-    throw new java.lang.RuntimeException("Graph delete failed (" + result.statusCode + "): " + result.body);
+    throw gs_httpFailure("Graph delete failed", result);
   }
   return result;
 }
@@ -374,7 +481,7 @@ function gs_acquireAppToken(tenantIdValue, clientIdValue, clientSecretValue, sco
 
   var tokenResponse = gs_httpRequest("POST", endpoint, "", payload, "application/x-www-form-urlencoded", "application/json", null);
   if (tokenResponse.statusCode < 200 || tokenResponse.statusCode >= 300) {
-    throw new java.lang.RuntimeException("Token endpoint failed (" + tokenResponse.statusCode + "): " + tokenResponse.body);
+    throw gs_httpFailure("Token endpoint failed", tokenResponse);
   }
 
   var parsed = JSON.parse(tokenResponse.body);
@@ -639,6 +746,21 @@ function gs_normalizeItem(itemObject, includeRaw) {
     fields: gs_safeObject(mapped.fields),
     sharepointIds: gs_safeObject(gs_firstDefined(mapped, ["sharepointIds", "sharePointIds"]))
   };
+  // an item of a document library expanded with its driveItem: the file (or the folder) it is
+  if (mapped.driveItem !== undefined && mapped.driveItem !== null) {
+    var drive = gs_safeObject(mapped.driveItem);
+    var parent = gs_safeObject(drive.parentReference);
+    normalized.driveItem = {
+      id: gs_safeString(drive.id),
+      name: gs_safeString(drive.name),
+      size: drive.size === undefined || drive.size === null ? null : Number(drive.size),
+      folder: drive.folder !== undefined && drive.folder !== null,
+      mimeType: drive.file ? gs_safeString(gs_safeObject(drive.file).mimeType) : "",
+      driveId: gs_safeString(parent.driveId),
+      path: gs_safeString(parent.path),
+      webUrl: gs_safeString(drive.webUrl)
+    };
+  }
   if (includeRaw) {
     normalized.raw = mapped;
   }
@@ -902,7 +1024,7 @@ function gs_httpRequestInfoInternal(token, requestInfo, payloadString, payloadBy
 function gs_graphGetJsonRequestInfo(requestInfo, token, headers) {
   var result = gs_httpRequestInfoInternal(token, requestInfo, null, null, "", "application/json", headers, false);
   if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
+    throw gs_httpFailure("Graph request failed", result);
   }
   if (gs_isBlank(result.body)) {
     return {};
@@ -914,7 +1036,7 @@ function gs_graphPostJsonRequestInfo(requestInfo, token, payloadObject, headers)
   var payload = payloadObject === null || payloadObject === undefined ? "{}" : JSON.stringify(payloadObject);
   var result = gs_httpRequestInfoInternal(token, requestInfo, payload, null, "application/json", "application/json", headers, false);
   if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw new java.lang.RuntimeException("Graph request failed (" + result.statusCode + "): " + result.body);
+    throw gs_httpFailure("Graph request failed", result);
   }
   if (gs_isBlank(result.body)) {
     return {};
@@ -926,7 +1048,7 @@ function gs_graphPatchJsonRequestInfo(requestInfo, token, payloadObject, headers
   var payload = payloadObject === null || payloadObject === undefined ? "{}" : JSON.stringify(payloadObject);
   var result = gs_httpRequestInfoInternal(token, requestInfo, payload, null, "application/json", "application/json", headers, false);
   if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw new java.lang.RuntimeException("Graph patch failed (" + result.statusCode + "): " + result.body);
+    throw gs_httpFailure("Graph patch failed", result);
   }
   if (gs_isBlank(result.body)) {
     return {};
@@ -937,7 +1059,7 @@ function gs_graphPatchJsonRequestInfo(requestInfo, token, payloadObject, headers
 function gs_graphDeleteRequestInfo(requestInfo, token, headers) {
   var result = gs_httpRequestInfoInternal(token, requestInfo, null, null, "", "application/json", headers, false);
   if (result.statusCode !== 404 && (result.statusCode < 200 || result.statusCode >= 300)) {
-    throw new java.lang.RuntimeException("Graph delete failed (" + result.statusCode + "): " + result.body);
+    throw gs_httpFailure("Graph delete failed", result);
   }
   return result;
 }
@@ -945,7 +1067,7 @@ function gs_graphDeleteRequestInfo(requestInfo, token, headers) {
 function gs_graphPutBinaryRequestInfo(requestInfo, token, payloadBytes, contentType, headers) {
   var result = gs_httpRequestInfoInternal(token, requestInfo, null, payloadBytes, contentType, "application/json", headers, false);
   if (result.statusCode < 200 || result.statusCode >= 300) {
-    throw new java.lang.RuntimeException("Graph upload failed (" + result.statusCode + "): " + result.body);
+    throw gs_httpFailure("Graph upload failed", result);
   }
   if (gs_isBlank(result.body)) {
     return {};
@@ -975,6 +1097,9 @@ function gs_graphCollectPagedValues(initialUrl, token, maxPageCount) {
   var pageCount = 0;
   var latestDeltaLink = "";
   while (!gs_isBlank(nextLink) && pageCount < maxPageCount) {
+    if (pageCount > 0 && !gs_isGraphLink(nextLink)) {
+      throw new java.lang.IllegalStateException("Next link refused: not an URL of Microsoft Graph");
+    }
     var pageObject = gs_graphGetJson(nextLink, token);
     var pageValues = pageObject.value instanceof Array ? pageObject.value : [];
     var i;
@@ -996,12 +1121,122 @@ function gs_graphCollectPagedValues(initialUrl, token, maxPageCount) {
   };
 }
 
+// The type facets of a column definition of Microsoft Graph.
+var GS_COLUMN_FACETS = ["boolean", "calculated", "choice", "contentApprovalStatus", "currency", "dateTime", "geolocation",
+  "hyperlinkOrPicture", "lookup", "number", "personOrGroup", "term", "text", "thumbnail"];
+
+function gs_columnHasType(column) {
+  if (column === null || typeof column !== "object") {
+    return true;
+  }
+  if (!gs_isBlank(column.type)) {
+    return true;
+  }
+  var i;
+  for (i = 0; i < GS_COLUMN_FACETS.length; i++) {
+    var facet = column[GS_COLUMN_FACETS[i]];
+    if (facet !== null && facet !== undefined && typeof facet === "object") {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The type a value of an item of Graph shows, for a column without type facet: "url" for a hyperlink ({Url,
+// Description}), "thumbnail" for an image (the JSON text of the image: type thumbnail, fileName, serverRelativeUrl), ""
+// when the value tells nothing.
+function gs_columnTypeOfValue(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "object" && !(value instanceof Array) && typeof value.Url === "string") {
+    return "url";
+  }
+  if (typeof value === "string" && value.charAt(0) === "{") {
+    try {
+      var image = JSON.parse(value);
+      if (image !== null && typeof image === "object" && (image.type === "thumbnail" || (typeof image.serverRelativeUrl === "string" && typeof image.fileName === "string"))) {
+        return "thumbnail";
+      }
+    } catch (ignoreJson) {
+      return "";
+    }
+  }
+  return "";
+}
+
+// Graph (v1.0 and beta) gives some columns of a list without any type facet: hyperlink, image (thumbnail),
+// attachments (seen on a real tenant, 2026-11-10; only the SharePoint API v2.1 types them). Those columns get a "type"
+// as that API names it: "attachment" for the Attachments column, "url" or "thumbnail" when the values of the first
+// items show it (GET .../items, only those columns, maxPageCount pages of 200 at most, until each is known). Changes
+// the columns in place; reading the items failing leaves them as they are.
+// Answers {missing, completed, error}: the visible columns without type, the ones completed, the HTTP status of a failure.
+function gs_completeColumnTypes(token, columnsUrl, columns, maxPageCount) {
+  var found = { missing: 0, completed: 0, error: "" };
+  var lacking = [];
+  var i;
+  for (i = 0; i < columns.length; i++) {
+    var candidate = columns[i];
+    if (!gs_columnHasType(candidate) && candidate.hidden !== true && candidate.readOnly !== true && /^[A-Za-z0-9_]+$/.test(gs_safeString(candidate.name))) {
+      lacking.push(candidate);
+    }
+  }
+  found.missing = lacking.length;
+  var unknown = [];
+  for (i = 0; i < lacking.length; i++) {
+    if (lacking[i].name === "Attachments") {
+      lacking[i].type = "attachment";
+      found.completed++;
+    } else {
+      unknown.push(lacking[i]);
+    }
+  }
+  var url = gs_safeString(columnsUrl);
+  if (unknown.length === 0 || !gs_isGraphLink(url) || !/\/columns$/.test(url)) {
+    return found;
+  }
+  var names = [];
+  for (i = 0; i < unknown.length; i++) {
+    names.push(unknown[i].name);
+  }
+  var next = url.replace(/\/columns$/, "/items") + "?$top=200&$expand=fields($select=" + names.join(",") + ")";
+  var pages = 0;
+  try {
+    while (!gs_isBlank(next) && pages < maxPageCount && unknown.length > 0) {
+      if (!gs_isGraphLink(next)) {
+        break;
+      }
+      var page = gs_graphGetJson(next, token);
+      pages++;
+      var items = page.value instanceof Array ? page.value : [];
+      var j;
+      for (j = 0; j < items.length && unknown.length > 0; j++) {
+        var fields = items[j] && items[j].fields ? items[j].fields : {};
+        var k;
+        for (k = unknown.length - 1; k >= 0; k--) {
+          var type = gs_columnTypeOfValue(fields[unknown[k].name]);
+          if (type !== "") {
+            unknown[k].type = type;
+            found.completed++;
+            unknown.splice(k, 1);
+          }
+        }
+      }
+      next = gs_safeString(page["@odata.nextLink"]);
+    }
+  } catch (e) {
+    var status = gs_httpStatusOf(e).status;
+    found.error = status === null || status === undefined ? "items_failed" : String(status);
+  }
+  return found;
+}
+
 function gs_graphMonitorOperation(token, monitorUrl, includeMonitorBody, failOnError) {
   var requestedMonitorUrl = gs_require("monitorUrl", monitorUrl);
   var monitorResult = gs_httpRequest("GET", requestedMonitorUrl, token, null, "", "application/json", null);
   var shouldFailOnError = failOnError === undefined ? true : gs_toBoolean(failOnError, true);
   if (shouldFailOnError && monitorResult.statusCode >= 400) {
-    throw new java.lang.RuntimeException("Copy monitor request failed (" + monitorResult.statusCode + "): " + monitorResult.body);
+    throw gs_httpFailure("Copy monitor request failed", monitorResult);
   }
 
   var monitorBody = {};
@@ -1301,4 +1536,297 @@ function gs_graphSubscriptionDeleteRequestInfo(token, subscriptionId) {
 
 function gs_graphBatchPostRequestInfo(token) {
   return gs_newGraphRequestInformation(token, "POST", "{+baseurl}/$batch", null);
+}
+
+// ---- reads of an import (C8Oforms): a page at a time, a site or a list by id without a lookup ---------------------
+
+// An URL of Microsoft Graph (https://graph.microsoft.com/...), the only host a next link may send the token to.
+function gs_isGraphLink(link) {
+  try {
+    var uri = new java.net.URI(String(link));
+    return String(uri.getScheme()).toLowerCase() === "https" &&
+      String(uri.getHost()).toLowerCase() === "graph.microsoft.com" &&
+      uri.getPort() === -1 && uri.getRawUserInfo() === null;
+  } catch (ignoreLink) {
+    return false;
+  }
+}
+
+// The $skiptoken of a next link of Graph: "" when there is none, or when the link is not an URL of Graph.
+function gs_skipTokenOf(nextLink) {
+  if (gs_isBlank(nextLink) || !gs_isGraphLink(nextLink)) {
+    return "";
+  }
+  var query = String(nextLink).split("?")[1] || "";
+  var params = query.split("&");
+  var i;
+  for (i = 0; i < params.length; i++) {
+    var at = params[i].indexOf("=");
+    var name = at === -1 ? params[i] : params[i].substring(0, at);
+    if (at !== -1 && (name === "$skiptoken" || name.toLowerCase() === "%24skiptoken")) {
+      return String(java.net.URLDecoder.decode(params[i].substring(at + 1), "UTF-8"));
+    }
+  }
+  return "";
+}
+
+// The URL of a request with the $skiptoken of a next page (the templates of the SDK have no $skiptoken).
+function gs_withSkipToken(url, skipToken) {
+  if (gs_isBlank(skipToken)) {
+    return url;
+  }
+  if (!/^[!-~]{1,4096}$/.test(String(skipToken))) {
+    throw new java.lang.IllegalArgumentException("Invalid skipToken");
+  }
+  return gs_appendQueryParam(url, "$skiptoken", String(skipToken));
+}
+
+// A site by its id (GET /sites/{id}).
+function gs_getSite(token, siteIdValue) {
+  var requestInfo = gs_graphSiteBuilder(token, gs_require("siteId", siteIdValue)).toGetRequestInformation();
+  gs_graphAddQueryParameter(requestInfo, "$select", "id,name,displayName,webUrl,siteCollection,sharepointIds");
+  var normalized = gs_normalizeSite(gs_graphGetJsonRequestInfo(requestInfo, token), "", "");
+  normalized.siteId = gs_require("siteId", normalized.siteId);
+  normalized.id = normalized.siteId;
+  return normalized;
+}
+
+// The site and the list of a call. Given by their ids with describe false, they are used as they are, with no call to
+// Graph (a page of an import); else as gs_resolveSiteAndList.
+function gs_siteAndList(token, siteIdValue, siteHostnameValue, sitePathValue, listIdValue, listNameValue, describe) {
+  if (!describe && !gs_isBlank(siteIdValue) && !gs_isBlank(listIdValue)) {
+    return {
+      siteId: String(siteIdValue),
+      siteHostname: "",
+      sitePath: "",
+      listId: String(listIdValue),
+      listName: "",
+      listDisplayName: "",
+      listWebUrl: "",
+      listInfo: {},
+      sharepointIds: {}
+    };
+  }
+  return gs_resolveSiteAndList(token, siteIdValue, siteHostnameValue, sitePathValue, listIdValue, listNameValue);
+}
+
+// The sites whose name matches (GET /sites?search=), "*" for all the sites the token reaches.
+function gs_graphSitesSearchUrl(token, searchValue, selectFields) {
+  var search = gs_defaultString(searchValue, "*").replace(/[\u0000-\u001f]/g, " ");
+  var url = String(gs_getGraphClientContext(token).adapter.getBaseUrl()) + "/sites?search=" + gs_encodePathSegment(search);
+  return gs_appendQueryParam(url, "$select", selectFields.join(","));
+}
+
+// The sites a user can open without searching, then the ones the search finds: the sites the user follows (GET
+// /me/followedSites, a delegated token), the root site of the tenant (GET /sites/root), then GET /sites?search=. The
+// search of Graph relies on Microsoft Search and fails on some tenants (500 generalException): its failure is answered
+// (searchFailed: its HTTP status), the other sites still are, those whose name has the text searched (any for * or "").
+// {items: [normalized sites, each once], followed: n, searchFailed}.
+function gs_sitesOfUser(token, searchText, fields, maxPageCount) {
+  var base = String(gs_getGraphClientContext(token).adapter.getBaseUrl());
+  var wanted = gs_safeString(searchText).trim();
+  var all = wanted === "" || wanted === "*";
+  var lower = wanted.toLowerCase();
+  var found = { items: [], followed: 0, searchFailed: "" };
+  var seen = {};
+  var add = function (site, filter) {
+    var normalized = gs_normalizeSite(site, "", "");
+    var id = gs_safeString(normalized.siteId || normalized.id);
+    if (id === "" || seen[id]) {
+      return false;
+    }
+    if (filter && !all && (gs_safeString(normalized.displayName) + " " + gs_safeString(normalized.name) + " " + gs_safeString(normalized.webUrl)).toLowerCase().indexOf(lower) === -1) {
+      return false;
+    }
+    seen[id] = true;
+    found.items.push(normalized);
+    return true;
+  };
+  var select = "$select=" + fields.join(",");
+  var i;
+  try {
+    var followed = gs_graphCollectPagedValues(base + "/me/followedSites?" + select, token, maxPageCount).values;
+    for (i = 0; i < followed.length; i++) {
+      if (add(followed[i], true)) {
+        found.followed++;
+      }
+    }
+  } catch (ignoreFollowed) {
+    // an application token has no user: no followed sites
+  }
+  try {
+    add(gs_graphGetJson(base + "/sites/root?" + select, token), true);
+  } catch (ignoreRoot) {
+  }
+  try {
+    var searched = gs_graphCollectPagedValues(gs_graphSitesSearchUrl(token, all ? "*" : wanted, fields), token, maxPageCount).values;
+    for (i = 0; i < searched.length; i++) {
+      add(searched[i], false);
+    }
+  } catch (e) {
+    var status = gs_httpStatusOf(e).status;
+    found.searchFailed = status === null || status === undefined ? "failed" : String(status);
+  }
+  return found;
+}
+
+function gs_graphSiteListColumnsGetRequestInfo(token, siteId, listId) {
+  return gs_graphSiteBuilder(token, siteId).lists().byListId(gs_require("listId", listId)).columns().toGetRequestInformation();
+}
+
+// GET /me as an URL: the request of the SDK for /me is /users/TokenToReplace, which only a middleware of the SDK client
+// rewrites, and the HTTP client of this library has none.
+function gs_graphMeUrl(token, selectFields) {
+  var url = String(gs_getGraphClientContext(token).adapter.getBaseUrl()) + "/me";
+  return gs_appendQueryParam(url, "$select", selectFields);
+}
+
+// ---- SharePoint REST of SharePoint Online: the attachments of list items and the files of a site, read with a
+// delegated token of the host of the site (audience https://<tenant>.sharepoint.com, AllSites.Read) ----------------
+
+// The files a project hands over to another one (lib_BaseRow uploads from there only): <java.io.tmpdir>/c8o-file-transfer.
+var GS_TRANSFER_DIR = "c8o-file-transfer";
+var GS_MAX_FILE_BYTES = 52428800;
+var GS_GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+// The URL of a site for its REST API: https, no user, port, query nor fragment, no trailing slash.
+function gs_restSiteUrl(siteUrlValue) {
+  var value = gs_require("siteUrl", siteUrlValue).trim().replace(/\/+$/, "");
+  var uri = null;
+  try {
+    uri = new java.net.URI(value);
+  } catch (ignoreUri) {
+    throw new java.lang.IllegalArgumentException("Invalid siteUrl");
+  }
+  if (String(uri.getScheme()).toLowerCase() !== "https" || gs_isBlank(uri.getHost()) || uri.getRawUserInfo() !== null ||
+      uri.getPort() !== -1 || uri.getRawQuery() !== null || uri.getRawFragment() !== null ||
+      /(^|\/)\.\.?(\/|$)/.test(gs_safeString(uri.getPath()))) {
+    throw new java.lang.IllegalArgumentException("siteUrl must be the https URL of a site");
+  }
+  return value;
+}
+
+// GET of the REST API with Accept application/json;odata=nometadata; an error keeps the status and Retry-After.
+function gs_restGetJson(url, token) {
+  var result = gs_httpRequest("GET", url, token, null, "", "application/json;odata=nometadata", null);
+  if (result.statusCode < 200 || result.statusCode >= 300) {
+    throw gs_httpFailure("SharePoint request failed", result);
+  }
+  return gs_isBlank(result.body) ? {} : JSON.parse(result.body);
+}
+
+// The attachments of an item: /_api/web/lists(guid'<list>')/items(<id>)/AttachmentFiles.
+function gs_restAttachmentsUrl(siteUrl, listIdValue, itemIdValue) {
+  var listId = gs_require("listId", listIdValue).replace(/^\{|\}$/g, "");
+  var itemId = gs_require("itemId", itemIdValue);
+  if (!GS_GUID.test(listId) || !/^[1-9][0-9]{0,9}$/.test(itemId)) {
+    throw new java.lang.IllegalArgumentException("Invalid listId or itemId");
+  }
+  return siteUrl + "/_api/web/lists(guid'" + listId.toLowerCase() + "')/items(" + itemId + ")/AttachmentFiles?$select=FileName,ServerRelativeUrl";
+}
+
+// The content of a file by its server relative path (/sites/x/Lists/y/Attachments/1/a b.pdf): each segment encoded,
+// its single quotes doubled for the OData literal.
+function gs_restFileUrl(siteUrl, pathValue) {
+  var path = gs_require("serverRelativeUrl", pathValue);
+  if (path.charAt(0) !== "/" || path.length > 2000 || /[\u0000-\u001f]/.test(path) || /(^|\/)\.\.?(\/|$)/.test(path)) {
+    throw new java.lang.IllegalArgumentException("Invalid serverRelativeUrl");
+  }
+  var encoded = path.split("/").map(function(segment) {
+    return encodeURIComponent(segment.split("'").join("''"));
+  }).join("/");
+  return siteUrl + "/_api/web/GetFileByServerRelativePath(decodedurl='" + encoded + "')/$value";
+}
+
+// The transfer folder, created when missing.
+function gs_transferDir() {
+  var dir = new java.io.File(java.lang.System.getProperty("java.io.tmpdir"), GS_TRANSFER_DIR);
+  if (!dir.isDirectory() && !dir.mkdirs() && !dir.isDirectory()) {
+    throw new java.lang.IllegalStateException("The transfer folder cannot be created");
+  }
+  return dir.getCanonicalFile();
+}
+
+// A file name that is a name only: no folder, no character a file system refuses, 150 characters at most.
+function gs_safeFileName(nameValue) {
+  var name = gs_safeString(nameValue).replace(/[\\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^[.\s]+/, "").trim();
+  if (name.length > 150) {
+    var dot = name.lastIndexOf(".");
+    var extension = dot > 0 && name.length - dot <= 10 ? name.substring(dot) : "";
+    name = name.substring(0, 150 - extension.length) + extension;
+  }
+  return name.length ? name : "file";
+}
+
+// Downloads an URL with a token into a new file of the transfer folder (in a folder of its own, under its own name):
+// {path, fileName, size, contentType}. More than maxBytes: an error of status 413, nothing kept. The caller deletes the
+// file (and its folder) once used.
+function gs_downloadToTransferFile(url, token, fileNameValue, maxBytesValue) {
+  var maxBytes = maxBytesValue > 0 ? maxBytesValue : GS_MAX_FILE_BYTES;
+  var response = gs_getGraphHttpClient().newCall(gs_buildNativeRequest("GET", url, token, null, null, "", "*/*", null)).execute();
+  var folder = null;
+  var file = null;
+  var kept = false;
+  try {
+    var statusCode = response.code();
+    if (statusCode < 200 || statusCode >= 300) {
+      var errorBody = "";
+      try {
+        errorBody = response.body() === null ? "" : String(response.body().string()).substring(0, 2000);
+      } catch (ignoreBody) {
+      }
+      throw gs_httpFailure("SharePoint download failed", { statusCode: statusCode, body: errorBody, retryAfter: gs_safeString(response.header("Retry-After")) });
+    }
+    if (response.body() === null || response.body().contentLength() > maxBytes) {
+      throw gs_httpFailure("File too large", { statusCode: 413, body: "", retryAfter: "" });
+    }
+    folder = new java.io.File(gs_transferDir(), String(java.util.UUID.randomUUID()));
+    if (!folder.mkdir()) {
+      throw new java.lang.IllegalStateException("The transfer folder cannot be created");
+    }
+    file = new java.io.File(folder, gs_safeFileName(fileNameValue));
+    var input = response.body().byteStream();
+    var output = new java.io.FileOutputStream(file);
+    var size = 0;
+    try {
+      var buffer = java.lang.reflect.Array.newInstance(java.lang.Byte.TYPE, 65536);
+      var read = input.read(buffer);
+      while (read !== -1) {
+        size += read;
+        if (size > maxBytes) {
+          throw gs_httpFailure("File too large", { statusCode: 413, body: "", retryAfter: "" });
+        }
+        output.write(buffer, 0, read);
+        read = input.read(buffer);
+      }
+    } finally {
+      output.close();
+    }
+    kept = true;
+    return { path: String(file.getCanonicalPath()), fileName: String(file.getName()), size: size, contentType: gs_safeString(response.header("Content-Type")) };
+  } finally {
+    response.close();
+    if (!kept) {
+      try {
+        if (file !== null) {
+          file["delete"]();
+        }
+        if (folder !== null) {
+          folder["delete"]();
+        }
+      } catch (ignoreDelete) {
+      }
+    }
+  }
+}
+
+// The content of a drive item (a document of a library) by Graph: /drives/{driveId}/items/{itemId}/content, which
+// redirects to its download URL (followed, without the token).
+function gs_graphDriveItemContentUrl(token, driveIdValue, itemIdValue) {
+  var driveId = gs_require("driveId", driveIdValue);
+  var itemId = gs_require("itemId", itemIdValue);
+  if (!/^[A-Za-z0-9!_\-]{1,200}$/.test(driveId) || !/^[A-Za-z0-9!_\-]{1,200}$/.test(itemId)) {
+    throw new java.lang.IllegalArgumentException("Invalid driveId or itemId");
+  }
+  return String(gs_getGraphClientContext(token).adapter.getBaseUrl()) + "/drives/" + driveId + "/items/" + itemId + "/content";
 }

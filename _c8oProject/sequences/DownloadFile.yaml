@@ -1,0 +1,70 @@
+accessibility: Private
+authenticatedContextRequired: true
+comment: 'Downloads a file of a SharePoint Online site by its server relative URL (an attachment, the image of an Image column...) through the SharePoint REST API, into a file of its own under <java.io.tmpdir>/c8o-file-transfer, and answers its path: the caller deletes it once used. More than maxBytes: an error of httpStatus 413, nothing kept. (SharePoint permission AllSites.Read)'
+↓inputVars [steps.InputVariablesStep-1799700001016]: 
+  comment: Exposes request inputs in XML for debugging and source mapping.
+↓ExecuteDownloadFile [steps.SimpleStep-1799700001017]: 
+  comment: Streams GET /_api/web/GetFileByServerRelativePath(decodedurl)/$value into the transfer folder.
+  expression: |
+    'include("js/sharepoint_graph_common.js");
+    
+    var graphOperation = "download_file";
+    var requiredPermission = "AllSites.Read";
+    var tokenMode = "delegated";
+    response = null;
+    try {
+    	var token = gs_require("accessToken", accessToken);
+    	var site = gs_restSiteUrl(siteUrl);
+    	var limit = gs_parseInteger("maxBytes", maxBytes, GS_MAX_FILE_BYTES);
+    	if (limit < 1 || limit > 1073741824) {
+    		limit = GS_MAX_FILE_BYTES;
+    	}
+    	var name = gs_isBlank(fileName) ? String(serverRelativeUrl).split("/").pop() : fileName;
+    	var file = gs_downloadToTransferFile(gs_restFileUrl(site, serverRelativeUrl), token, name, limit);
+    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, file);
+    } catch (e) {
+    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    }
+    json = gs_toBoolean(jsonOutput, false) ? JSON.stringify(response) : null;'
+↓response [steps.JsonToXmlStep-1799700001018]: 
+  comment: Converts the JS response object into XML output.
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: response
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: response
+↓json [steps.ElementStep-1799700001019]: 
+  comment: The answer as a JSON text, names and types kept exactly, when jsonOutput is true; else empty.
+  expression: json
+  nodeName: json
+↓siteUrl [variables.RequestableVariable-1799700001010]: 
+  comment: URL of the site, for example https://contoso.sharepoint.com/sites/engineering.
+  description: Site URL
+  required: true
+↓serverRelativeUrl [variables.RequestableVariable-1799700001011]: 
+  comment: Server relative URL of the file, for example /sites/engineering/Lists/Tasks/Attachments/12/report.pdf.
+  description: Server relative URL
+  required: true
+↓fileName [variables.RequestableVariable-1799700001012]: 
+  comment: Optional name of the file written (its name in the URL by default).
+  description: File name
+↓maxBytes [variables.RequestableVariable-1799700001013]: 
+  comment: Largest size accepted, in bytes (52428800 by default).
+  description: Largest size
+  value: 52428800
+↓accessToken [variables.RequestableVariable-1799700001014]: 
+  comment: Delegated bearer token of the user for the host of the site (audience https://<tenant>.sharepoint.com, SharePoint permission AllSites.Read).
+  description: Delegated SharePoint access token
+  required: true
+  visibility: '-1'
+↓jsonOutput [variables.RequestableVariable-1799700001015]: 
+  comment: true adds the answer as a JSON text (element json), its names and types kept exactly.
+  description: Answer as a JSON text
+  value: false

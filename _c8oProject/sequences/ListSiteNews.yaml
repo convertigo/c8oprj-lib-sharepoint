@@ -1,0 +1,87 @@
+accessibility: Private
+authenticatedContextRequired: true
+comment: 'Lists the news of a SharePoint site (its pages promoted as news), the newest first, maxItems at most: for each one a whole number key (from its page id), its page id, title, description and date; with withContent, its text (the HTML of its text web parts, cleaned, without image nor link) and its image (the file of a library of the site its thumbnail is: driveId, itemId, name, size; null for an image of another host or the default thumbnail), so that an application can hold the news instead of the site. Microsoft Graph only. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)'
+↓inputVars [steps.InputVariablesStep-1799700002140]: 
+  comment: Exposes request inputs in XML for debugging and source mapping.
+↓ExecuteListSiteNews [steps.SimpleStep-1799700002141]: 
+  comment: Lists the news pages of the site, then reads the text and the image of each one.
+  expression: |
+    'include("js/sharepoint_graph_common.js");
+    include("js/sharepoint_page_content.js");
+    
+    var graphOperation = "site_news";
+    var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All";
+    var tokenMode = "delegated_or_application";
+    response = null;
+    try {
+    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    	tokenMode = tokenInfo.mode;
+    	var site = gs_isBlank(siteId) ? gs_resolveSite(tokenInfo.token, "", siteHostname, sitePath).siteId : String(siteId);
+    	var limitItems = gs_parseInteger("maxItems", maxItems, 50);
+    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, gs_siteNews(tokenInfo.token, site, {
+    		withContent: gs_toBoolean(withContent, false),
+    		maxItems: limitItems < 1 ? 1 : (limitItems > 100 ? 100 : limitItems)
+    	}));
+    } catch (e) {
+    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    }
+    json = gs_toBoolean(jsonOutput, false) ? JSON.stringify(response) : null;'
+↓response [steps.JsonToXmlStep-1799700002142]: 
+  comment: Converts the JS response object into XML output.
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: response
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: response
+↓json [steps.ElementStep-1799700002143]: 
+  comment: The answer as a JSON text, names and types kept exactly, when jsonOutput is true; else empty.
+  expression: json
+  nodeName: json
+↓siteId [variables.RequestableVariable-1799700002144]: 
+  comment: Optional site identifier (Graph). If empty, siteHostname and sitePath are used to resolve it.
+  description: Optional Graph site identifier
+↓siteHostname [variables.RequestableVariable-1799700002145]: 
+  comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+  description: SharePoint hostname
+↓sitePath [variables.RequestableVariable-1799700002146]: 
+  comment: Site path when resolving siteId, for example /sites/engineering.
+  description: SharePoint site path
+↓withContent [variables.RequestableVariable-1799700002147]: 
+  comment: 'true: the text and the image of each news post (a read of Graph for each one, and one for its image); false: only the list.'
+  description: Read the content of the posts
+  value: false
+↓maxItems [variables.RequestableVariable-1799700002148]: 
+  comment: The news posts listed at most (1 to 100), the newest first.
+  description: Maximum posts
+  value: 50
+↓accessToken [variables.RequestableVariable-1799700002149]: 
+  comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+  description: Delegated Microsoft Graph access token
+  visibility: '-1'
+↓tenantId [variables.RequestableVariable-1799700002151]: 
+  comment: Azure Entra tenant id used for app-only token acquisition.
+  description: Tenant id for app-only token
+  value: ${Microsoft_AzGraph.tenantId=}
+↓clientId [variables.RequestableVariable-1799700002152]: 
+  comment: Azure Entra application client id used for app-only token acquisition.
+  description: Client id for app-only token
+  value: ${Microsoft_AzGraph.clientId=}
+↓clientSecret [variables.RequestableVariable-1799700002150]: 
+  comment: Azure Entra application client secret used for app-only token acquisition.
+  description: Client secret for app-only token
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+  visibility: '-1'
+↓jsonOutput [variables.RequestableVariable-1799700002153]: 
+  comment: true adds the answer as a JSON text (element json), its names and types kept exactly.
+  description: Answer as a JSON text
+  value: false

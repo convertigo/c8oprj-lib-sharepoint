@@ -1,0 +1,115 @@
+accessibility: Private
+authenticatedContextRequired: true
+comment: 'Lists the column definitions of a SharePoint list (GET /sites/{site}/lists/{list}/columns) as Microsoft Graph gives them: type facets, choices, lookups, hidden and read-only columns. Microsoft Graph only. (Graph permissions Sites.Read.All|Sites.ReadWrite.All)'
+↓inputVars [steps.InputVariablesStep-1799700000031]: 
+  comment: Exposes request inputs in XML for debugging and source mapping.
+↓ExecuteListGetColumns [steps.SimpleStep-1799700000032]: 
+  comment: 'Calls GET /columns of the list and follows its pages up to maxPages; with completeTypes, the columns Graph gives without type get one from their name or the values of the first items.'
+  expression: |
+    'include("js/sharepoint_graph_common.js");
+    
+    var graphOperation = "list_columns";
+    var requiredPermission = "Sites.Read.All|Sites.ReadWrite.All";
+    var tokenMode = "delegated_or_application";
+    response = null;
+    try {
+    	var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
+    	tokenMode = tokenInfo.mode;
+    	var limitPages = gs_parseInteger("maxPages", maxPages, 5);
+    	if (limitPages < 1) {
+    		limitPages = 1;
+    	}
+    	if (limitPages > 20) {
+    		limitPages = 20;
+    	}
+    	var resolved = gs_siteAndList(tokenInfo.token, siteId, siteHostname, sitePath, listId, listName, gs_toBoolean(describeList, true));
+    	var requestInfo = gs_graphSiteListColumnsGetRequestInfo(tokenInfo.token, resolved.siteId, resolved.listId);
+    	var pageResult = gs_graphCollectPagedValues(gs_requestInfoUrl(requestInfo), tokenInfo.token, limitPages);
+    	var types = gs_toBoolean(completeTypes, false) ? gs_completeColumnTypes(tokenInfo.token, gs_requestInfoUrl(requestInfo), pageResult.values, limitPages) : null;
+    	response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
+    		siteId: resolved.siteId,
+    		listId: resolved.listId,
+    		listName: resolved.listName,
+    		listDisplayName: resolved.listDisplayName,
+    		listWebUrl: resolved.listWebUrl,
+    		count: pageResult.values.length,
+    		pagesFetched: pageResult.pagesFetched,
+    		hasMore: !gs_isBlank(pageResult.nextLink),
+    		typesMissing: types === null ? 0 : types.missing,
+    		typesCompleted: types === null ? 0 : types.completed,
+    		typesError: types === null ? "" : types.error,
+    		columns: pageResult.values
+    	});
+    } catch (e) {
+    	response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
+    }
+    json = gs_toBoolean(jsonOutput, false) ? JSON.stringify(response) : null;'
+↓response [steps.JsonToXmlStep-1799700000033]: 
+  comment: Converts the JS response object into XML output.
+  jsonObject: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: JS
+        - →→: response
+  key: 
+    - xmlizable: 
+      - ↑classname: com.twinsoft.convertigo.beans.steps.SmartType
+      - SmartType: 
+        - ↑mode: PLAIN
+        - →→: response
+↓json [steps.ElementStep-1799700000034]: 
+  comment: The answer as a JSON text, names and types kept exactly, when jsonOutput is true; else empty.
+  expression: json
+  nodeName: json
+↓siteId [variables.RequestableVariable-1799700000019]: 
+  comment: Optional site identifier. If empty, siteHostname and sitePath are used to resolve it.
+  description: Optional Graph site identifier
+↓siteHostname [variables.RequestableVariable-1799700000020]: 
+  comment: SharePoint hostname when resolving siteId, for example contoso.sharepoint.com.
+  description: SharePoint hostname
+↓sitePath [variables.RequestableVariable-1799700000021]: 
+  comment: Site path when resolving siteId, for example /sites/engineering.
+  description: SharePoint site path
+↓listId [variables.RequestableVariable-1799700000022]: 
+  comment: Optional list identifier. If provided, listName is ignored.
+  description: Optional Graph list identifier
+↓listName [variables.RequestableVariable-1799700000023]: 
+  comment: List display name or internal name used to resolve listId.
+  description: SharePoint list name
+↓describeList [variables.RequestableVariable-1799700000024]: 
+  comment: 'false with siteId and listId: the list is not read first (its name is not answered), one call to Graph less.'
+  description: Read the list first
+  value: true
+↓maxPages [variables.RequestableVariable-1799700000025]: 
+  comment: Maximum number of Graph pages fetched (1 to 20).
+  description: Maximum pages
+  value: 5
+↓accessToken [variables.RequestableVariable-1799700000026]: 
+  comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
+  description: Delegated Microsoft Graph access token
+  visibility: '-1'
+↓tenantId [variables.RequestableVariable-1799700000027]: 
+  comment: Azure Entra tenant id used for app-only token acquisition.
+  description: Tenant id for app-only token
+  value: ${Microsoft_AzGraph.tenantId=}
+↓clientId [variables.RequestableVariable-1799700000028]: 
+  comment: Azure Entra application client id used for app-only token acquisition.
+  description: Client id for app-only token
+  value: ${Microsoft_AzGraph.clientId=}
+↓clientSecret [variables.RequestableVariable-1799700000029]: 
+  comment: Azure Entra application client secret used for app-only token acquisition.
+  description: Client secret for app-only token
+  value: 
+    - ↑ciphered: true
+    - ↑traceable: false
+    - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
+  visibility: '-1'
+↓completeTypes [variables.RequestableVariable-1799700000035]: 
+  comment: 'true: the visible columns Graph gives without any type facet (hyperlink, image, attachments) get a "type" as the SharePoint API v2.1 names it: "attachment" for the Attachments column, "url" or "thumbnail" when the values of the first items show it (GET .../items with only those columns, maxPages pages of 200 at most, only when such a column exists); reading the items failing leaves them as they are (typesError).'
+  description: Complete the types of the columns without type
+  value: false
+↓jsonOutput [variables.RequestableVariable-1799700000030]: 
+  comment: true adds the answer as a JSON text (element json), its names and types kept exactly.
+  description: Answer as a JSON text
+  value: false

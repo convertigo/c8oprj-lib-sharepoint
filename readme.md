@@ -75,13 +75,13 @@ For more technical informations : [documentation](./project.md)
      <tr><td>To contribute</td><td>
 
      ```
-     lib_Microsoft_Sharepoint=https://github.com/convertigo/c8oprj-lib-sharepoint.git:branch=8.0.0.0
+     lib_Microsoft_Sharepoint=https://github.com/convertigo/c8oprj-lib-sharepoint.git:branch=8.0.1.0
      ```
      </td></tr>
      <tr><td>To simply use</td><td>
 
      ```
-     lib_Microsoft_Sharepoint=https://github.com/convertigo/c8oprj-lib-sharepoint/archive/8.0.0.0.zip
+     lib_Microsoft_Sharepoint=https://github.com/convertigo/c8oprj-lib-sharepoint/archive/8.0.1.0.zip
      ```
      </td></tr>
     </table>
@@ -137,7 +137,40 @@ When `onPrem.http.authenticationType` is `NTLM` (or `Basic`/`BasicPreemptive`), 
 - Delegated mode: pass `accessToken`; tenant/client/secret are ignored.
 - Application override: leave `accessToken` empty and pass tenant/client/secret explicitly when needed.
 - Routed public sequences switch backend with `provider` (`graph` or `onprem`), defaulting to `graph`.
-- Graph implementation sequences are `Hidden` and `authenticatedContextRequired=true`.
+- Every sequence is `Private` and `authenticatedContextRequired=true`: call them from your own server sequences
+  (`callSequence`, a Sequence step), or expose your own `Public` wrapper sequence with its own access control.
+- `accessToken` is masked in the logs, as the secrets. Graph is reached through the proxy settings of the engine
+  (manual or automatic, domains without proxy; basic proxy authentication). Redirections are followed (a download of Graph is
+  one), never from https to http, and the token is not sent to another host. Next links are followed on
+  `https://graph.microsoft.com` only.
+- `ListItemAttachments` and `DownloadFile` read SharePoint Online through its REST API, with a delegated token of the host
+  of the site (audience `https://<tenant>.sharepoint.com`, delegated SharePoint permission `AllSites.Read`): the
+  attachments of a list item (Graph does not give them), and any file of the site by its server relative path
+  (attachments, images of Image columns). `DownloadFile` writes the file to a folder of its own under
+  `<java.io.tmpdir>/c8o-file-transfer` (50 MB at most by default) and answers its path: the caller deletes it once used.
+- `DownloadDriveItem` downloads a document of a library the same way through Graph (the delegated Graph token), and
+  `ListGetItems` with `expandDriveItem=true` gives the drive item of each item of a library (id, name, size, folder,
+  driveId, path).
+- An error answers `httpStatus` and `retryAfter` when Graph answered (429 or 503 with `Retry-After`: wait and call again;
+  401: the token expired).
+- `SearchSites` with `includeFollowed=true` answers the sites the user follows (`/me/followedSites`) and the root site
+  first, then the ones the search finds: the search of Graph relies on Microsoft Search and fails on some tenants (500
+  generalException), its failure is then answered in `searchFailed` and the other sites still are (filtered by the text
+  searched). Tests: `node --test tests/sites.test.cjs`.
+- `GetSitePageContent` reads a modern page of a site (its home page by default: the layout `home`, else `Home.aspx`;
+  `pageId` or `pageName` for another one) through the pages API of Graph (`canvasLayout`) and answers `sections` of
+  `columns` (their `width` over 12) of `blocks`: `text` (its HTML), `image` (inlined as `data:image/...;base64` when it
+  is a file of the site, read by Graph from its library by path, `maxImageBytes` and `maxImages` at most; `external`
+  for an https image of another host), `links` (quick links: title, absolute URL, `listId` when it opens a list of the
+  site), `list` (a list or document library web part: its `listId`, name and URL) and `divider`. Each column also
+  gives `html`, its blocks as one HTML fragment. The HTML keeps a list of tags and attributes only (no style, class,
+  event handler, script, frame nor `javascript:` URL; links absolute, opened in a new tab). The web parts it does not
+  turn (news, site activity, events, custom ones...) are listed in `skipped`. Graph only; tests: `node --test
+  tests/page-content.test.cjs`.
+- `jsonOutput=true` adds the answer as a JSON text (element `json`), its names and types kept exactly
+  (`GetMe`, `GetSitePageContent`, `SearchSites`, `ResolveSite`, `ListSiteLists`, `ListGetColumns`, `ListGetItems`, `GetListItem`).
+- Reading a list page by page (an import): `ListGetItems` with `maxPages=1`, then `skipToken` = `nextSkipToken` of the
+  previous answer; `describeList=false` with `siteId` and `listId` saves the lookup of the list on each page.
 - Sequence responses expose `tokenMode` (`delegated` or `application`) for diagnostics.
 - On-prem routed operations support bearer token, basic auth, or cookie-based auth, and write operations automatically request SharePoint FormDigest via `/_api/contextinfo`.
 - On-prem logic is executed directly from routed public sequences through shared JS helpers (no internal `OnPrem*` sequences).
@@ -217,12 +250,8 @@ Legend:
 
 ## Endpoint-Only Test Calls
 
-Minimal example with testcase injection:
-```bash
-curl 'http://localhost:18080/convertigo/projects/lib_Microsoft_Sharepoint/.json' \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  --data-raw '__sequence=ResolveSite&__testcase=TC_ResolveSite'
-```
+The sequences are `Private`: a direct HTTP call is answered only in a Convertigo admin test-platform session
+(for example the session of the Convertigo Studio or of the administration console).
 
 Typical authenticated admin call (Convertigo Studio session):
 ```bash
@@ -328,6 +357,8 @@ Grant Microsoft Graph **Application** permissions, then click `Grant admin conse
 - `CopyItem` returns an asynchronous monitor URL; completion must be polled by client code.
 - `CreateGraphSubscription` requires a publicly reachable HTTPS callback endpoint and Graph webhook validation handling.
 - `ExecuteGraphBatch` permissions are the union of all operations included in `batchJson.requests`.
+- `GetMe`, `SearchSites` and `ListGetColumns` are Microsoft Graph only (no on-prem route); `GetMe` needs a delegated token.
+- Graph (v1.0 and beta) gives the hyperlink, image (thumbnail) and attachments columns of a list without any type facet: `ListGetColumns` with `completeTypes=true` adds their `type` as the SharePoint API v2.1 names it (`attachment` for the Attachments column, `url` or `thumbnail` when the values of the first items show it: one more read of the items, those columns only); the answer gives `typesMissing`, `typesCompleted` and `typesError`.
 
 ## Payload Examples
 

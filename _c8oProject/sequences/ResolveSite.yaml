@@ -1,6 +1,6 @@
-accessibility: Hidden
+accessibility: Private
 authenticatedContextRequired: true
-comment: Resolves a SharePoint site by hostname and path using Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
+comment: Resolves a SharePoint site by its id, or by hostname and path, using Microsoft Graph (online) or SharePoint REST (on-prem). (Graph permissions Sites.Read.All|Sites.ReadWrite.All)
 ↓inputVars [steps.InputVariablesStep-1772620203268]: 
   comment: Exposes request inputs in XML for debugging and source mapping.
 ↓ExecuteResolveSite [steps.SimpleStep-1772889605124]: 
@@ -36,7 +36,7 @@ comment: Resolves a SharePoint site by hostname and path using Microsoft Graph (
     	try {
     		var tokenInfo = gs_resolveToken(accessToken, tenantId, clientId, clientSecret);
     		tokenMode = tokenInfo.mode;
-    		var resolvedSite = gs_resolveSite(tokenInfo.token, "", siteHostname, sitePath);
+    		var resolvedSite = gs_isBlank(siteId) ? gs_resolveSite(tokenInfo.token, "", siteHostname, sitePath) : gs_getSite(tokenInfo.token, siteId);
     
     		response = gs_responseOk(graphOperation, tokenMode, requiredPermission, {
     			siteId: resolvedSite.siteId,
@@ -52,7 +52,8 @@ comment: Resolves a SharePoint site by hostname and path using Microsoft Graph (
     	} catch (e) {
     		response = gs_responseError(graphOperation, tokenMode, requiredPermission, e);
     	}
-    }'
+    }
+    json = gs_toBoolean(jsonOutput, false) ? JSON.stringify(response) : null;'
 ↓response [steps.JsonToXmlStep-1772889605174]: 
   comment: Converts the JS response object into XML output.
   jsonObject: 
@@ -67,27 +68,33 @@ comment: Resolves a SharePoint site by hostname and path using Microsoft Graph (
       - SmartType: 
         - ↑mode: PLAIN
         - →→: response
+↓json [steps.ElementStep-1799700000101]: 
+  comment: The answer as a JSON text, names and types kept exactly, when jsonOutput is true; else empty.
+  expression: json
+  nodeName: json
+↓siteId [variables.RequestableVariable-1799700000102]: 
+  comment: Optional site identifier (Graph). If provided, the site is read by its id and siteHostname/sitePath are ignored.
+  description: Optional Graph site identifier
 ↓siteHostname [variables.RequestableVariable-1772620203462]: 
   comment: SharePoint hostname for target site, for example contoso.sharepoint.com.
   description: SharePoint hostname
-  required: true
   value: ${lib_Microsoft_Sharepoint.onPrem.http.server=sharepoint.local}
 ↓sitePath [variables.RequestableVariable-1772620203534]: 
   comment: Site path under hostname, for example /sites/engineering.
   description: SharePoint site path
-  required: true
   value: ${lib_Microsoft_Sharepoint.onPrem.sitePath=/sites/test}
 ↓accessToken [variables.RequestableVariable-1772620203612]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
+  visibility: '-1'
 ↓tenantId [variables.RequestableVariable-1772620203700]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
-  value: ${Microsoft_AzGraph.tenantId}
+  value: ${Microsoft_AzGraph.tenantId=}
 ↓clientId [variables.RequestableVariable-1772620203795]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
-  value: ${Microsoft_AzGraph.clientId}
+  value: ${Microsoft_AzGraph.clientId=}
 ↓clientSecret [variables.RequestableVariable-1772620203907]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token
@@ -96,22 +103,26 @@ comment: Resolves a SharePoint site by hostname and path using Microsoft Graph (
     - ↑traceable: false
     - →→: xa51e43ef1d108aa61557c46e9670abb3d50668c28091a8d24f75c1d2eb802780bc1e972ff7382dfe8bbbe42f37b74544
   visibility: '-1'
+↓jsonOutput [variables.RequestableVariable-1799700000103]: 
+  comment: true adds the answer as a JSON text (element json), its names and types kept exactly.
+  description: Answer as a JSON text
+  value: false
 ↓provider [variables.RequestableVariable-1772714808905]: 
   comment: Backend provider selection graph or onprem.
   description: Provider selection graph or onprem
-  value: ${lib_Microsoft_Sharepoint.provider}
+  value: ${lib_Microsoft_Sharepoint.provider=graph}
 ↓siteBaseUrl [variables.RequestableVariable-1772714809119]: 
   comment: Optional SharePoint on-prem site base URL, for example https://sharepoint.local/sites/intranet.
   description: On-prem site base URL
-  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl}
+  value: ${lib_Microsoft_Sharepoint.onPrem.siteBaseUrl=}
 ↓onPremProtocol [variables.RequestableVariable-1772714809180]: 
   comment: URL scheme fallback for on-prem mode when siteBaseUrl is not provided.
   description: On-prem protocol fallback
-  value: ${lib_Microsoft_Sharepoint.onPrem.protocol}
+  value: ${lib_Microsoft_Sharepoint.onPrem.protocol=https}
 ↓onPremUsername [variables.RequestableVariable-1772714809240]: 
   comment: Optional technical username for on-prem basic authentication.
   description: On-prem technical username
-  value: ${lib_Microsoft_Sharepoint.onPrem.username}
+  value: ${lib_Microsoft_Sharepoint.onPrem.username=}
 ↓onPremPassword [variables.RequestableVariable-1772714809313]: 
   comment: Optional technical password for on-prem basic authentication.
   description: On-prem technical password

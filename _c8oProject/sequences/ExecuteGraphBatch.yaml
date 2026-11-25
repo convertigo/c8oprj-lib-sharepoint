@@ -1,4 +1,4 @@
-accessibility: Hidden
+accessibility: Private
 authenticatedContextRequired: true
 comment: Executes one Microsoft Graph JSON batch request against /$batch endpoint (permissions depend on contained requests).
 ↓inputVars [steps.InputVariablesStep-1772711627847]: 
@@ -74,14 +74,15 @@ comment: Executes one Microsoft Graph JSON batch request against /$batch endpoin
 ↓accessToken [variables.RequestableVariable-1772711628101]: 
   comment: Optional delegated bearer token. If provided, tenant/client/secret are ignored.
   description: Delegated Microsoft Graph access token
+  visibility: '-1'
 ↓tenantId [variables.RequestableVariable-1772711628172]: 
   comment: Azure Entra tenant id used for app-only token acquisition.
   description: Tenant id for app-only token
-  value: ${Microsoft_AzGraph.tenantId}
+  value: ${Microsoft_AzGraph.tenantId=}
 ↓clientId [variables.RequestableVariable-1772711628248]: 
   comment: Azure Entra application client id used for app-only token acquisition.
   description: Client id for app-only token
-  value: ${Microsoft_AzGraph.clientId}
+  value: ${Microsoft_AzGraph.clientId=}
 ↓clientSecret [variables.RequestableVariable-1772711628331]: 
   comment: Azure Entra application client secret used for app-only token acquisition.
   description: Client secret for app-only token

@@ -7,7 +7,7 @@
   contextTimeout: 59
   corsOrigin: =Origin
   httpSessionTimeout: 60
-  version: 8.0.0.2
+  version: 8.0.1.0
   ↓void [connectors.SqlConnector]: 🗏 connectors/void.yaml
   ↓BuildGraphFlatJar [sequences.GenericSequence]: 🗏 sequences/BuildGraphFlatJar.yaml
   ↓CopyItem [sequences.GenericSequence]: 🗏 sequences/CopyItem.yaml
@@ -19,15 +19,22 @@
   ↓DeleteItem [sequences.GenericSequence]: 🗏 sequences/DeleteItem.yaml
   ↓DeleteItemPermission [sequences.GenericSequence]: 🗏 sequences/DeleteItemPermission.yaml
   ↓DeleteListItem [sequences.GenericSequence]: 🗏 sequences/DeleteListItem.yaml
+  ↓DownloadDriveItem [sequences.GenericSequence]: 🗏 sequences/DownloadDriveItem.yaml
+  ↓DownloadFile [sequences.GenericSequence]: 🗏 sequences/DownloadFile.yaml
   ↓DownloadItemContent [sequences.GenericSequence]: 🗏 sequences/DownloadItemContent.yaml
   ↓ExecuteGraphBatch [sequences.GenericSequence]: 🗏 sequences/ExecuteGraphBatch.yaml
   ↓GetCopyItemOperation [sequences.GenericSequence]: 🗏 sequences/GetCopyItemOperation.yaml
   ↓GetGraphAccessToken [sequences.GenericSequence]: 🗏 sequences/GetGraphAccessToken.yaml
   ↓GetItem [sequences.GenericSequence]: 🗏 sequences/GetItem.yaml
   ↓GetListItem [sequences.GenericSequence]: 🗏 sequences/GetListItem.yaml
+  ↓GetMe [sequences.GenericSequence]: 🗏 sequences/GetMe.yaml
+  ↓GetSitePageContent [sequences.GenericSequence]: 🗏 sequences/GetSitePageContent.yaml
+  ↓ListSiteNews [sequences.GenericSequence]: 🗏 sequences/ListSiteNews.yaml
   ↓InviteItemRecipients [sequences.GenericSequence]: 🗏 sequences/InviteItemRecipients.yaml
+  ↓ListGetColumns [sequences.GenericSequence]: 🗏 sequences/ListGetColumns.yaml
   ↓ListGetItems [sequences.GenericSequence]: 🗏 sequences/ListGetItems.yaml
   ↓ListGetItemsDelta [sequences.GenericSequence]: 🗏 sequences/ListGetItemsDelta.yaml
+  ↓ListItemAttachments [sequences.GenericSequence]: 🗏 sequences/ListItemAttachments.yaml
   ↓ListItemPermissions [sequences.GenericSequence]: 🗏 sequences/ListItemPermissions.yaml
   ↓ListItems [sequences.GenericSequence]: 🗏 sequences/ListItems.yaml
   ↓ListItemsDelta [sequences.GenericSequence]: 🗏 sequences/ListItemsDelta.yaml
@@ -39,6 +46,7 @@
   ↓ResolveList [sequences.GenericSequence]: 🗏 sequences/ResolveList.yaml
   ↓ResolveSite [sequences.GenericSequence]: 🗏 sequences/ResolveSite.yaml
   ↓RestoreItemVersion [sequences.GenericSequence]: 🗏 sequences/RestoreItemVersion.yaml
+  ↓SearchSites [sequences.GenericSequence]: 🗏 sequences/SearchSites.yaml
   ↓UpdateItem [sequences.GenericSequence]: 🗏 sequences/UpdateItem.yaml
   ↓UpdateListItem [sequences.GenericSequence]: 🗏 sequences/UpdateListItem.yaml
   ↓UploadItemContent [sequences.GenericSequence]: 🗏 sequences/UploadItemContent.yaml
