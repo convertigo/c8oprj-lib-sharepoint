@@ -116,6 +116,9 @@ jobs:
         env:
           TEST_SERVER_ENDPOINT: ${{ env.C8O_SERVER_ENDPOINT }}
           C8O_PROJECT: lib_Microsoft_Sharepoint
+          # the sequences are Private: the tests call them with an administrator session (test platform role)
+          C8O_ADMIN_USER: ${{ secrets.C8O_USER_TEST_CONVERTIGO }}
+          C8O_ADMIN_PASSWORD: ${{ secrets.C8O_PASSWORD_TEST_CONVERTIGO }}
         run: |
           python3 ./scripts/run_testcases.py
 

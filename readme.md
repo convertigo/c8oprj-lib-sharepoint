@@ -274,6 +274,7 @@ python3 ./scripts/run_testcases.py
 
 Useful overrides:
 - `C8O_BASE_URL` to target another Convertigo endpoint.
+- `C8O_ADMIN_USER` + `C8O_ADMIN_PASSWORD` to call the Private sequences with an administrator session (test platform role); the CI passes the account it deploys with.
 - `C8O_PROJECT` to target another project name.
 - `TEST_PROVIDER=graph` or `TEST_PROVIDER=onprem` to force the backend under test.
 - `SITE_HOSTNAME`, `SITE_PATH`, `LIST_NAME`, `DRIVE_NAME` to target another SharePoint site context.

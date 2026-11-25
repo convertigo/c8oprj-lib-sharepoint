@@ -11,6 +11,8 @@ The plan runs in phases:
 
 This script calls Convertigo over HTTP using:
 - a provided Convertigo session (JSESSIONID / X-Convertigo-Authenticated), or
+- an administrator session (C8O_ADMIN_USER / C8O_ADMIN_PASSWORD): the sequences of the
+  library are Private, and only a session with the test platform role can call them over HTTP, or
 - an automatic login sequence call (default: ClientSDKtesting/login).
 
 Graph credentials are optional:
@@ -75,6 +77,8 @@ C8O_XSRF_TOKEN = _env("C8O_XSRF_TOKEN", "")
 C8O_JSESSIONID = _env("C8O_JSESSIONID", "")
 C8O_XAUTH_TOKEN = _env("C8O_XAUTH_TOKEN", "")
 C8O_AUTO_LOGIN = _env_bool("C8O_AUTO_LOGIN", "true")
+C8O_ADMIN_USER = _env("C8O_ADMIN_USER", "")
+C8O_ADMIN_PASSWORD = _env("C8O_ADMIN_PASSWORD", "")
 C8O_LOGIN_PROJECT = _env("C8O_LOGIN_PROJECT", "ClientSDKtesting")
 C8O_LOGIN_SEQUENCE = _env("C8O_LOGIN_SEQUENCE", "login")
 C8O_LOGIN_BASE_URL = _env(
@@ -147,6 +151,7 @@ REPORT_FILE = _env("REPORT_FILE", "build/logical-test-plan-report.json")
 SESSION: Dict[str, str] = {
     "jsessionid": C8O_JSESSIONID,
     "xauth": C8O_XAUTH_TOKEN,
+    "xsrf": C8O_XSRF_TOKEN,
 }
 
 
@@ -271,8 +276,8 @@ def _auto_login() -> None:
     }
     if C8O_ADMIN_INSTANCE:
         headers["Admin-Instance"] = C8O_ADMIN_INSTANCE
-    if C8O_XSRF_TOKEN:
-        headers["x-xsrf-token"] = C8O_XSRF_TOKEN
+    if SESSION.get("xsrf", ""):
+        headers["x-xsrf-token"] = SESSION["xsrf"]
 
     req = urllib.request.Request(
         C8O_LOGIN_BASE_URL,
@@ -304,10 +309,53 @@ def _auto_login() -> None:
     SESSION["xauth"] = xauth
 
 
+def _admin_login() -> None:
+    """Opens an administrator session (engine.Authenticate): it holds the test platform role that the
+    Private sequences of the library need when they are called over HTTP."""
+    body = urllib.parse.urlencode(
+        {"authType": "login", "authUserName": C8O_ADMIN_USER, "authPassword": C8O_ADMIN_PASSWORD}
+    ).encode("utf-8")
+    headers = {
+        "Accept": "*/*",
+        "Content-Type": "application/x-www-form-urlencoded",
+        # asks the engine for the XSRF token of the new session (used when the engine checks it)
+        "x-xsrf-token": SESSION.get("xsrf", "") or "Fetch",
+    }
+    if C8O_ADMIN_INSTANCE:
+        headers["Admin-Instance"] = C8O_ADMIN_INSTANCE
+    req = urllib.request.Request(
+        f"{C8O_SERVER_URL}/convertigo/admin/services/engine.Authenticate",
+        data=body,
+        method="POST",
+        headers=headers,
+    )
+    with urllib.request.urlopen(req, timeout=C8O_TIMEOUT_SEC) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+        set_cookies = resp.headers.get_all("Set-Cookie", [])
+        xsrf = resp.headers.get("x-xsrf-token", "")
+
+    if not re.search(r"<authenticated>\s*true\s*</authenticated>", raw):
+        raise RuntimeError("Administrator login failed on engine.Authenticate (check C8O_ADMIN_USER / C8O_ADMIN_PASSWORD)")
+
+    jsessionid = ""
+    for cookie in set_cookies:
+        match = re.search(r"(?i)\bJSESSIONID=([^;]+)", cookie)
+        if match:
+            jsessionid = match.group(1)  # the last one is the session opened by the login
+    if jsessionid == "":
+        raise RuntimeError("Administrator login failed: missing JSESSIONID in Set-Cookie headers")
+
+    SESSION["jsessionid"] = jsessionid
+    if xsrf:
+        SESSION["xsrf"] = xsrf
+
+
 def _ensure_session() -> None:
     if SESSION.get("jsessionid", "") != "":
         return
-    if C8O_AUTO_LOGIN:
+    if C8O_ADMIN_USER and C8O_ADMIN_PASSWORD:
+        _admin_login()
+    elif C8O_AUTO_LOGIN:
         _auto_login()
 
 
@@ -334,8 +382,8 @@ def call_sequence(sequence: str, params: Dict[str, Any]) -> Dict[str, Any]:
     }
     if C8O_ADMIN_INSTANCE:
         headers["Admin-Instance"] = C8O_ADMIN_INSTANCE
-    if C8O_XSRF_TOKEN:
-        headers["x-xsrf-token"] = C8O_XSRF_TOKEN
+    if SESSION.get("xsrf", ""):
+        headers["x-xsrf-token"] = SESSION["xsrf"]
     if SESSION.get("jsessionid", ""):
         headers["Cookie"] = f"introjs-dontShowAgain=true; JSESSIONID={SESSION['jsessionid']}"
     if SESSION.get("xauth", ""):
